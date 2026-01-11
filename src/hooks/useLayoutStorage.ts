@@ -1,6 +1,5 @@
 import { ref } from "vue";
 
-// 1. 定义接口：让 TS 知道分组长什么样
 interface Group {
   id: string;
   name: string;
@@ -8,7 +7,6 @@ interface Group {
   layout: any[];
 }
 
-// 2. 定义默认数据：包含两个分组（主页、工作）
 const defaultGroups: Group[] = [
   {
     id: "home",
@@ -17,35 +15,24 @@ const defaultGroups: Group[] = [
     layout: [
       { x: 1, y: 1, w: 3, h: 2, i: "clock-1", type: "Clock" },
       { x: 4, y: 3, w: 4, h: 1, i: "search-1", type: "Search" },
-      { x: 8, y: 5, w: 2, h: 2, i: "memo-1", type: "Memo", title: "备忘录" },
     ],
   },
   {
     id: "work",
     name: "工作",
     icon: "💼",
-    layout: [], // 第二页暂时为空
-  },
-  {
-    id: "fun",
-    name: "娱乐",
-    icon: "🎮",
     layout: [],
   },
 ];
 
-const STORAGE_KEY = "vvtab-groups-v1"; // 改个 Key，防止读到旧的脏数据
+const STORAGE_KEY = "vvtab-groups-v2"; // 升级版本号，避免旧数据冲突
 
 export function useLayoutStorage() {
-  // 当前选中的分组索引 (默认 0)
   const currentGroupIndex = ref(0);
-
-  // 分组数据：初始化直接使用默认值，防止空指针报错
   const groups = ref<Group[]>(JSON.parse(JSON.stringify(defaultGroups)));
-
   const isLoaded = ref(false);
 
-  // 加载数据
+  // --- 基础加载与保存 ---
   const loadData = () => {
     if (
       typeof chrome !== "undefined" &&
@@ -54,32 +41,21 @@ export function useLayoutStorage() {
     ) {
       chrome.storage.local.get([STORAGE_KEY], (result) => {
         const data = result[STORAGE_KEY];
-        // 如果读取到了有效数据，就覆盖默认值
         if (data && Array.isArray(data) && data.length > 0) {
-          console.log("✅ 读取到分组数据:", data);
           groups.value = data;
-        } else {
-          console.log("⚠️ 未读取到分组，使用默认配置");
         }
         isLoaded.value = true;
       });
     } else {
-      // 开发环境
       const localData = localStorage.getItem(STORAGE_KEY);
-      if (localData) {
-        groups.value = JSON.parse(localData);
-      }
+      if (localData) groups.value = JSON.parse(localData);
       isLoaded.value = true;
     }
   };
 
-  // 保存数据
   const saveData = () => {
     if (!isLoaded.value) return;
-
     const dataToSave = JSON.parse(JSON.stringify(groups.value));
-    console.log("💾 保存所有分组:", dataToSave);
-
     if (
       typeof chrome !== "undefined" &&
       chrome.storage &&
@@ -91,16 +67,83 @@ export function useLayoutStorage() {
     }
   };
 
-  // 切换分组函数
   const switchGroup = (index: number) => {
     currentGroupIndex.value = index;
   };
 
+  // --- 新增功能 ---
+
+  // 1. 新增分组
+  const addGroup = () => {
+    const newGroup: Group = {
+      id: `group-${Date.now()}`,
+      name: `分组 ${groups.value.length + 1}`,
+      icon: "📁", // 默认图标
+      layout: [],
+    };
+    groups.value.push(newGroup);
+    // 自动跳转到新分组
+    currentGroupIndex.value = groups.value.length - 1;
+    saveData();
+  };
+
+  // 2. 删除分组
+  const deleteGroup = (index: number) => {
+    if (groups.value.length <= 1) {
+      alert("至少保留一个分组！");
+      return;
+    }
+    const name = groups.value[index]?.name ?? `分组 ${index + 1}`;
+    const confirmDelete = confirm(
+      `确定要删除“${name}”吗？里面的组件也会消失。`
+    );
+    if (!confirmDelete) return;
+
+    groups.value.splice(index, 1);
+
+    // 如果删除的是当前选中的，或者前面的，需要修正 currentGroupIndex
+    if (currentGroupIndex.value >= index) {
+      currentGroupIndex.value = Math.max(0, currentGroupIndex.value - 1);
+    }
+    saveData();
+  };
+
+  // 3. 移动组件到其他分组
+  const moveWidgetToGroup = (widgetId: string, targetGroupIndex: number) => {
+    const sourceGroup = groups.value[currentGroupIndex.value];
+    const targetGroup = groups.value[targetGroupIndex];
+
+    if (!sourceGroup || !targetGroup) return;
+
+    // 找到组件
+    const widgetIndex = sourceGroup.layout.findIndex(
+      (item: any) => item.i === widgetId
+    );
+    if (widgetIndex === -1) return;
+
+    // 取出组件
+    const [widget] = sourceGroup.layout.splice(widgetIndex, 1);
+
+    // 重置组件位置 (放到目标组的左上角，或者利用网格库自动找空位)
+    // 这里简单处理：放到 (0,0)，网格库会自动处理重叠
+    widget.x = 0;
+    widget.y = 0;
+
+    // 放入目标组
+    targetGroup.layout.push(widget);
+
+    saveData();
+    alert(`已移动到 ${targetGroup.name}`);
+  };
+
   return {
-    groups, // 导出分组列表
-    currentGroupIndex, // 导出当前索引
-    switchGroup, // 导出切换函数
+    groups,
+    currentGroupIndex,
+    switchGroup,
     loadData,
     saveData,
+    addGroup,
+    deleteGroup,
+    moveWidgetToGroup,
   };
 }
