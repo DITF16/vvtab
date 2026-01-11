@@ -1,5 +1,8 @@
 <template>
-  <div class="wallpaper-layer"></div>
+  <div
+    class="wallpaper-layer"
+    :style="{ backgroundImage: `url(${currentWallpaperUrl})` }"
+  ></div>
 
   <div class="app-container" @click="closeContextMenu">
     <aside class="sidebar">
@@ -11,22 +14,21 @@
           :class="{ active: currentGroupIndex === index }"
           @click="switchGroup(index)"
           @contextmenu.prevent="onSidebarRightClick(index)"
-          :title="group.name + ' (右键删除)'"
         >
           {{ group.icon }}
         </div>
         <div class="group-icon add-btn" @click="addGroup">+</div>
       </div>
       <div class="sidebar-bottom">
-        <div class="setting-btn">⚙️</div>
+        <div class="setting-btn" @click="openWidgetStore">⚙️</div>
       </div>
     </aside>
 
     <main class="main-content">
       <header class="top-bar">
         <div class="user-profile">
-          <button class="icon-btn">
-            <span class="avatar">👤</span>
+          <button class="icon-btn" @click="openWallpaperSettings">
+            <span class="avatar">🖼️</span>
           </button>
         </div>
       </header>
@@ -57,7 +59,6 @@
             @contextmenu.prevent.stop="openWidgetMenu($event, item)"
           >
             <component :is="getComponent(item.type)" v-bind="item" />
-
             <div
               v-if="!['Clock', 'Search', 'Shortcut'].includes(item.type)"
               class="fallback-card"
@@ -80,18 +81,7 @@
       @click.stop
     >
       <template v-if="contextMenu.type === 'widget'">
-        <div class="menu-header">移动组件到...</div>
-        <div
-          v-for="(group, index) in groups"
-          :key="group.id"
-          class="menu-item"
-          v-show="index !== currentGroupIndex"
-          @click="handleMoveWidget(index)"
-        >
-          <span>{{ group.icon }} {{ group.name }}</span>
-        </div>
-
-        <div class="divider"></div>
+        <div class="menu-header">管理组件</div>
         <div class="menu-item delete" @click="handleDeleteWidget">
           🗑️ 删除此组件
         </div>
@@ -102,7 +92,7 @@
         <div class="menu-item" @click="openAddShortcutModal">➕ 添加图标</div>
         <div class="menu-item" @click="openWidgetStore">🧩 添加小组件</div>
         <div class="divider"></div>
-        <div class="menu-item">🖼️ 更换壁纸</div>
+        <div class="menu-item" @click="openWallpaperSettings">🖼️ 更换壁纸</div>
       </template>
     </div>
 
@@ -137,7 +127,6 @@
             placeholder="留空则自动获取"
           />
         </div>
-
         <div class="form-actions">
           <button class="btn cancel" @click="showShortcutModal = false">
             取消
@@ -148,50 +137,230 @@
         </div>
       </div>
     </div>
+
+    <div
+      v-if="showWallpaperModal"
+      class="modal-overlay"
+      @click.self="showWallpaperModal = false"
+    >
+      <div class="modal-content wallpaper-modal">
+        <div class="modal-header">
+          <h3>壁纸设置</h3>
+          <button class="close-btn" @click="showWallpaperModal = false">
+            ×
+          </button>
+        </div>
+
+        <div class="wp-body">
+          <div class="mode-switch">
+            <button
+              :class="{ active: wallpaperConfig.type === 'static' }"
+              @click="changeWallpaperMode('static')"
+            >
+              单张模式
+            </button>
+            <button
+              :class="{ active: wallpaperConfig.type === 'rotation' }"
+              @click="changeWallpaperMode('rotation')"
+            >
+              轮播模式
+            </button>
+          </div>
+
+          <div
+            v-if="wallpaperConfig.type === 'rotation'"
+            class="rotation-settings"
+          >
+            <label>切换间隔 (分钟): </label>
+            <input
+              type="number"
+              v-model.number="wallpaperConfig.interval"
+              min="1"
+              @change="handleSave"
+              class="interval-input"
+            />
+          </div>
+
+          <div class="image-grid">
+            <div
+              v-for="(img, idx) in wallpaperConfig.images"
+              :key="idx"
+              class="image-item"
+              :class="{
+                selected:
+                  wallpaperConfig.type === 'static' &&
+                  wallpaperConfig.staticImage === img,
+              }"
+              @click="selectWallpaper(img)"
+            >
+              <img :src="img" loading="lazy" />
+              <button class="del-img-btn" @click.stop="deleteWallpaper(idx)">
+                ×
+              </button>
+            </div>
+
+            <div class="image-item add-wp" @click="isAddingWallpaper = true">
+              <span v-if="!isAddingWallpaper" style="font-size: 24px">+</span>
+              <input
+                v-else
+                v-model="newWallpaperUrl"
+                placeholder="输入图片URL"
+                @keydown.enter="addNewWallpaper"
+                @blur="addNewWallpaper"
+                autoFocus
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from "vue";
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from "vue";
 import { GridLayout, GridItem } from "grid-layout-plus";
 import { useLayoutStorage } from "./hooks/useLayoutStorage";
 import ClockWidget from "./components/widgets/ClockWidget.vue";
 import SearchWidget from "./components/widgets/SearchWidget.vue";
 import ShortcutWidget from "./components/widgets/ShortcutWidget.vue";
 
+// --- 引入数据 ---
 const {
   groups,
   currentGroupIndex,
+  wallpaperConfig, // <--- 拿到壁纸配置
   switchGroup,
   loadData,
   saveData,
   addGroup,
   deleteGroup,
-  moveWidgetToGroup, // 确保从 hook 引入了这个方法
+  moveWidgetToGroup,
+  addWidgetToLayout,
 } = useLayoutStorage();
 
+// --- 状态 ---
 const showShortcutModal = ref(false);
+const showWallpaperModal = ref(false); // 壁纸弹窗状态
+const isAddingWallpaper = ref(false); // 是否正在输入壁纸URL
+const newWallpaperUrl = ref("");
 
-const shortcutForm = reactive({
-  title: "",
-  url: "",
-  icon: "",
-});
+// 轮播相关状态
+const rotationIndex = ref(0);
+let rotationTimer: any = null;
 
+// --- 表单数据 ---
+const shortcutForm = reactive({ title: "", url: "", icon: "" });
+
+// --- 计算属性 ---
+
+// 安全获取当前布局
 const currentLayout = computed({
   get() {
     const idx = currentGroupIndex?.value ?? 0;
-    const g = groups?.value?.[idx];
-    return g ? g.layout : [];
+    return groups.value[idx]?.layout || [];
   },
   set(newLayout: any[]) {
     const idx = currentGroupIndex?.value ?? 0;
-    if (groups?.value?.[idx]) {
-      groups.value[idx].layout = newLayout;
-    }
+    if (groups.value[idx]) groups.value[idx].layout = newLayout;
   },
 });
 
+// 计算当前背景图
+const currentWallpaperUrl = computed(() => {
+  const cfg = wallpaperConfig.value;
+  // 1. 如果没有图片，用默认渐变（这里返回空，CSS兜底）
+  if (!cfg.images || cfg.images.length === 0) return "";
+
+  // 2. 单张模式
+  if (cfg.type === "static") {
+    return cfg.staticImage || cfg.images[0];
+  }
+
+  // 3. 轮播模式
+  // 确保索引不越界
+  const idx = rotationIndex.value % cfg.images.length;
+  return cfg.images[idx];
+});
+
+// --- 初始化 ---
+onMounted(() => {
+  loadData();
+  startRotationTimer();
+});
+
+onUnmounted(() => {
+  if (rotationTimer) clearInterval(rotationTimer);
+});
+
+// 监听配置变化，重新启动定时器
+watch(() => wallpaperConfig.value.type, startRotationTimer);
+watch(() => wallpaperConfig.value.interval, startRotationTimer);
+
+function startRotationTimer() {
+  if (rotationTimer) clearInterval(rotationTimer);
+
+  if (wallpaperConfig.value.type === "rotation") {
+    const ms = (wallpaperConfig.value.interval || 15) * 60 * 1000;
+    // 立即随机一张开始 (可选，或者从0开始)
+    // rotationIndex.value = Math.floor(Math.random() * wallpaperConfig.value.images.length);
+
+    rotationTimer = setInterval(() => {
+      rotationIndex.value++;
+    }, ms);
+  }
+}
+
+const handleSave = () => saveData();
+
+// --- 壁纸逻辑 ---
+
+const openWallpaperSettings = () => {
+  showWallpaperModal.value = true;
+  closeContextMenu();
+};
+
+const changeWallpaperMode = (mode: "static" | "rotation") => {
+  wallpaperConfig.value.type = mode;
+  handleSave();
+};
+
+const selectWallpaper = (url: string) => {
+  // 只有单张模式下点击才切换
+  if (wallpaperConfig.value.type === "static") {
+    wallpaperConfig.value.staticImage = url;
+    handleSave();
+  }
+};
+
+const addNewWallpaper = () => {
+  if (newWallpaperUrl.value) {
+    wallpaperConfig.value.images.push(newWallpaperUrl.value);
+    // 如果是第一张，设为默认
+    if (wallpaperConfig.value.images.length === 1) {
+      wallpaperConfig.value.staticImage = newWallpaperUrl.value;
+    }
+    handleSave();
+  }
+  newWallpaperUrl.value = "";
+  isAddingWallpaper.value = false;
+};
+
+const deleteWallpaper = (index: number) => {
+  const deletedUrl = wallpaperConfig.value.images[index];
+  wallpaperConfig.value.images.splice(index, 1);
+
+  // 如果删掉的是当前选中的，重置选中
+  if (
+    wallpaperConfig.value.staticImage === deletedUrl &&
+    wallpaperConfig.value.images.length > 0
+  ) {
+    wallpaperConfig.value.staticImage = wallpaperConfig.value.images[0] || "";
+  }
+  handleSave();
+};
+
+// --- 右键菜单逻辑 ---
 const contextMenu = reactive({
   visible: false,
   x: 0,
@@ -199,27 +368,6 @@ const contextMenu = reactive({
   type: "background",
   targetWidgetId: "",
 });
-
-onMounted(() => {
-  loadData();
-});
-
-const handleSave = () => saveData();
-
-const getComponent = (type: string) => {
-  switch (type) {
-    case "Clock":
-      return ClockWidget;
-    case "Search":
-      return SearchWidget;
-    case "Shortcut":
-      return ShortcutWidget;
-    default:
-      return null;
-  }
-};
-
-// --- 右键菜单逻辑 ---
 
 const openBackgroundMenu = (e: MouseEvent) => {
   contextMenu.visible = true;
@@ -241,11 +389,9 @@ const closeContextMenu = () => {
   contextMenu.visible = false;
 };
 
-// --- 功能逻辑 ---
-
+// --- 其他功能逻辑 ---
 const onSidebarRightClick = (index: number) => deleteGroup(index);
 
-// 修复：添加回移动组件的处理函数
 const handleMoveWidget = (targetGroupIndex: number) => {
   moveWidgetToGroup(contextMenu.targetWidgetId, targetGroupIndex);
   closeContextMenu();
@@ -257,15 +403,12 @@ const handleDeleteWidget = () => {
   if (idx > -1) {
     layout.splice(idx, 1);
     currentLayout.value = [...layout];
-    saveData();
+    handleSave();
   }
   closeContextMenu();
 };
 
-const openWidgetStore = () => {
-  alert("这里弹出组件中心");
-  closeContextMenu();
-};
+const openWidgetStore = () => addWidgetToLayout("Memo"); // 简化，直接添加测试
 
 const openAddShortcutModal = () => {
   shortcutForm.title = "";
@@ -280,11 +423,8 @@ const confirmAddShortcut = () => {
     alert("请输入名称和网址");
     return;
   }
-
   let finalUrl = shortcutForm.url;
-  if (!finalUrl.startsWith("http")) {
-    finalUrl = "https://" + finalUrl;
-  }
+  if (!finalUrl.startsWith("http")) finalUrl = "https://" + finalUrl;
 
   const layout = currentLayout.value;
   const yPos = layout.reduce(
@@ -292,7 +432,7 @@ const confirmAddShortcut = () => {
     0
   );
 
-  const newWidget = {
+  layout.push({
     x: 0,
     y: yPos,
     w: 1,
@@ -302,18 +442,30 @@ const confirmAddShortcut = () => {
     title: shortcutForm.title,
     url: finalUrl,
     icon: shortcutForm.icon,
-  };
+  });
 
-  layout.push(newWidget);
   currentLayout.value = [...layout];
-  saveData();
-
+  handleSave();
   showShortcutModal.value = false;
+};
+
+// 组件映射
+const getComponent = (type: string) => {
+  switch (type) {
+    case "Clock":
+      return ClockWidget;
+    case "Search":
+      return SearchWidget;
+    case "Shortcut":
+      return ShortcutWidget;
+    default:
+      return null;
+  }
 };
 </script>
 
 <style scoped>
-/* 样式保持不变，直接复用你提供的即可 */
+/* 基础容器 */
 .app-container {
   display: flex;
   height: 100vh;
@@ -322,13 +474,17 @@ const confirmAddShortcut = () => {
   position: relative;
   z-index: 1;
 }
+/* 壁纸层：修改为 background-image */
 .wallpaper-layer {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(120deg, #e0c3fc 0%, #8ec5fc 100%);
+  background-color: #333; /* 兜底色 */
+  background-size: cover;
+  background-position: center;
+  transition: background-image 0.5s ease-in-out; /* 切换时的淡入淡出效果 */
   z-index: 0;
 }
 .sidebar {
@@ -496,10 +652,6 @@ const confirmAddShortcut = () => {
   flex-direction: column;
   gap: 15px;
 }
-.form-modal h3 {
-  margin: 0 0 10px 0;
-  color: #333;
-}
 .form-item label {
   display: block;
   font-size: 14px;
@@ -543,5 +695,119 @@ const confirmAddShortcut = () => {
 }
 .btn:hover {
   opacity: 0.9;
+}
+
+/* --- 壁纸弹窗样式 --- */
+.wallpaper-modal {
+  width: 600px;
+  height: 500px;
+  background: white;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-header h3 {
+  margin: 0;
+}
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.wp-body {
+  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.mode-switch {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.mode-switch button {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #f9f9f9;
+  cursor: pointer;
+}
+.mode-switch button.active {
+  background: #333;
+  color: white;
+  border-color: #333;
+}
+
+.rotation-settings {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.interval-input {
+  width: 80px !important;
+  padding: 5px !important;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+}
+.image-item {
+  aspect-ratio: 16/9;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+  border: 2px solid transparent;
+  background: #f0f0f0;
+}
+.image-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.image-item.selected {
+  border-color: #333;
+}
+.del-img-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  display: none;
+}
+.image-item:hover .del-img-btn {
+  display: block;
+}
+
+.add-wp {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 2px dashed #ddd;
+}
+.add-wp input {
+  width: 90%;
+  font-size: 12px;
+  padding: 4px;
 }
 </style>
