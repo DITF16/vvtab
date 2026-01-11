@@ -11,6 +11,7 @@
           :class="{ active: currentGroupIndex === index }"
           @click="switchGroup(index)"
           @contextmenu.prevent="onSidebarRightClick(index)"
+          :title="group.name + ' (右键删除)'"
         >
           {{ group.icon }}
         </div>
@@ -24,7 +25,9 @@
     <main class="main-content">
       <header class="top-bar">
         <div class="user-profile">
-          <button class="icon-btn"><span class="avatar">👤</span></button>
+          <button class="icon-btn">
+            <span class="avatar">👤</span>
+          </button>
         </div>
       </header>
 
@@ -77,7 +80,18 @@
       @click.stop
     >
       <template v-if="contextMenu.type === 'widget'">
-        <div class="menu-header">管理组件</div>
+        <div class="menu-header">移动组件到...</div>
+        <div
+          v-for="(group, index) in groups"
+          :key="group.id"
+          class="menu-item"
+          v-show="index !== currentGroupIndex"
+          @click="handleMoveWidget(index)"
+        >
+          <span>{{ group.icon }} {{ group.name }}</span>
+        </div>
+
+        <div class="divider"></div>
         <div class="menu-item delete" @click="handleDeleteWidget">
           🗑️ 删除此组件
         </div>
@@ -143,7 +157,7 @@ import { GridLayout, GridItem } from "grid-layout-plus";
 import { useLayoutStorage } from "./hooks/useLayoutStorage";
 import ClockWidget from "./components/widgets/ClockWidget.vue";
 import SearchWidget from "./components/widgets/SearchWidget.vue";
-import ShortcutWidget from "./components/widgets/ShortcutWidget.vue"; // 引入新组件
+import ShortcutWidget from "./components/widgets/ShortcutWidget.vue";
 
 const {
   groups,
@@ -153,18 +167,17 @@ const {
   saveData,
   addGroup,
   deleteGroup,
+  moveWidgetToGroup, // 确保从 hook 引入了这个方法
 } = useLayoutStorage();
 
 const showShortcutModal = ref(false);
 
-// 表单数据
 const shortcutForm = reactive({
   title: "",
   url: "",
   icon: "",
 });
 
-// 计算属性处理布局
 const currentLayout = computed({
   get() {
     const idx = currentGroupIndex?.value ?? 0;
@@ -179,12 +192,11 @@ const currentLayout = computed({
   },
 });
 
-// 右键菜单状态
 const contextMenu = reactive({
   visible: false,
   x: 0,
   y: 0,
-  type: "background", // 'widget' | 'background'
+  type: "background",
   targetWidgetId: "",
 });
 
@@ -201,7 +213,7 @@ const getComponent = (type: string) => {
     case "Search":
       return SearchWidget;
     case "Shortcut":
-      return ShortcutWidget; // 注册新组件
+      return ShortcutWidget;
     default:
       return null;
   }
@@ -209,7 +221,6 @@ const getComponent = (type: string) => {
 
 // --- 右键菜单逻辑 ---
 
-// 1. 点击背景：打开添加菜单
 const openBackgroundMenu = (e: MouseEvent) => {
   contextMenu.visible = true;
   contextMenu.type = "background";
@@ -218,7 +229,6 @@ const openBackgroundMenu = (e: MouseEvent) => {
   contextMenu.targetWidgetId = "";
 };
 
-// 2. 点击组件：打开删除菜单
 const openWidgetMenu = (e: MouseEvent, item: any) => {
   contextMenu.visible = true;
   contextMenu.type = "widget";
@@ -227,7 +237,6 @@ const openWidgetMenu = (e: MouseEvent, item: any) => {
   contextMenu.targetWidgetId = item.i;
 };
 
-// 3. 关闭菜单
 const closeContextMenu = () => {
   contextMenu.visible = false;
 };
@@ -235,6 +244,12 @@ const closeContextMenu = () => {
 // --- 功能逻辑 ---
 
 const onSidebarRightClick = (index: number) => deleteGroup(index);
+
+// 修复：添加回移动组件的处理函数
+const handleMoveWidget = (targetGroupIndex: number) => {
+  moveWidgetToGroup(contextMenu.targetWidgetId, targetGroupIndex);
+  closeContextMenu();
+};
 
 const handleDeleteWidget = () => {
   const layout = currentLayout.value;
@@ -248,14 +263,11 @@ const handleDeleteWidget = () => {
 };
 
 const openWidgetStore = () => {
-  alert("这里弹出之前的组件中心（代码暂略，专注实现快捷方式）");
+  alert("这里弹出组件中心");
   closeContextMenu();
 };
 
-// --- 添加图标逻辑 ---
-
 const openAddShortcutModal = () => {
-  // 重置表单
   shortcutForm.title = "";
   shortcutForm.url = "";
   shortcutForm.icon = "";
@@ -269,15 +281,12 @@ const confirmAddShortcut = () => {
     return;
   }
 
-  // 简单的自动补全 https
   let finalUrl = shortcutForm.url;
   if (!finalUrl.startsWith("http")) {
     finalUrl = "https://" + finalUrl;
   }
 
-  // 找一个合适的位置 (简单的追加到最后)
   const layout = currentLayout.value;
-  // 找最底部的 y
   const yPos = layout.reduce(
     (max: number, item: any) => Math.max(max, item.y + item.h),
     0
@@ -286,17 +295,17 @@ const confirmAddShortcut = () => {
   const newWidget = {
     x: 0,
     y: yPos,
-    w: 1, // 图标默认 1x1
+    w: 1,
     h: 1,
     i: `shortcut-${Date.now()}`,
     type: "Shortcut",
     title: shortcutForm.title,
     url: finalUrl,
-    icon: shortcutForm.icon, // 如果为空，组件内部会自动去 fetch favicon
+    icon: shortcutForm.icon,
   };
 
   layout.push(newWidget);
-  currentLayout.value = [...layout]; // 触发更新
+  currentLayout.value = [...layout];
   saveData();
 
   showShortcutModal.value = false;
@@ -304,7 +313,7 @@ const confirmAddShortcut = () => {
 </script>
 
 <style scoped>
-/* 复用之前的样式，增加表单和弹窗样式 */
+/* 样式保持不变，直接复用你提供的即可 */
 .app-container {
   display: flex;
   height: 100vh;
@@ -366,7 +375,7 @@ const confirmAddShortcut = () => {
   margin: 0 auto;
   flex: 1;
   padding-top: 20px;
-  min-height: 500px; /* 确保有足够区域点击右键 */
+  min-height: 500px;
 }
 .grid-card-wrapper {
   background: transparent;
@@ -440,10 +449,8 @@ const confirmAddShortcut = () => {
   margin-top: 100px;
   color: rgba(255, 255, 255, 0.7);
   font-size: 1.1rem;
-  pointer-events: none; /* 防止遮挡右键 */
+  pointer-events: none;
 }
-
-/* --- 右键菜单 --- */
 .context-menu {
   position: fixed;
   z-index: 9999;
@@ -480,8 +487,6 @@ const confirmAddShortcut = () => {
 .menu-item.delete {
   color: #ff4d4f;
 }
-
-/* --- 表单弹窗样式 --- */
 .form-modal {
   width: 400px;
   background: white;
@@ -515,7 +520,6 @@ const confirmAddShortcut = () => {
   border-color: #333;
   background: white;
 }
-
 .form-actions {
   display: flex;
   gap: 10px;

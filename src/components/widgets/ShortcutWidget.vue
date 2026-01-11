@@ -1,16 +1,21 @@
 <template>
-  <a :href="url" target="_blank" class="shortcut-container" @mousedown.stop>
+  <div
+    class="shortcut-container"
+    @mousedown="handleMouseDown"
+    @click="handleClick"
+  >
     <div class="icon-wrapper">
       <img
         v-if="iconUrl"
         :src="iconUrl"
         class="icon-img"
         @error="handleImgError"
+        draggable="false"
       />
       <span v-else class="icon-text">{{ title.charAt(0) }}</span>
     </div>
     <span class="title">{{ title }}</span>
-  </a>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -19,18 +24,51 @@ import { ref } from "vue";
 const props = defineProps<{
   title?: string;
   url?: string;
-  icon?: string; // 父组件传过来的 key 可能是 icon 或 iconUrl
+  icon?: string;
 }>();
 
-// 解构并提供默认值，避免模板中出现 undefined
 const { title = "", url = "", icon = "" } = props;
 
-// 优先使用传入的 icon，否则尝试用 favicon 服务自动获取
 const iconUrl = ref(
   icon || `https://www.google.com/s2/favicons?sz=128&domain_url=${url}`
 );
 
-// 如果图片加载失败（比如 Google 服务被墙），回退到文字模式
+// --- 核心修复逻辑开始 ---
+
+let startX = 0;
+let startY = 0;
+let isDrag = false;
+
+// 1. 鼠标按下时，记录坐标
+const handleMouseDown = (e: MouseEvent) => {
+  startX = e.clientX;
+  startY = e.clientY;
+  isDrag = false;
+};
+
+// 2. 点击（鼠标松开）时，计算位移
+const handleClick = (e: MouseEvent) => {
+  const endX = e.clientX;
+  const endY = e.clientY;
+
+  // 计算移动距离 (勾股定理，或者简单的 x+y 差值)
+  const distance = Math.sqrt(
+    Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)
+  );
+
+  // 如果移动距离超过 5 像素，判定为拖拽，不执行跳转
+  if (distance > 5) {
+    return;
+  }
+
+  // 否则判定为点击，执行跳转
+  if (url) {
+    window.open(url, "_blank");
+  }
+};
+
+// --- 核心修复逻辑结束 ---
+
 const handleImgError = () => {
   iconUrl.value = "";
 };
@@ -47,6 +85,8 @@ const handleImgError = () => {
   text-decoration: none;
   color: inherit;
   transition: transform 0.1s;
+  cursor: pointer;
+  user-select: none; /* 防止文字被选中变蓝 */
 }
 
 .shortcut-container:active {
@@ -64,6 +104,7 @@ const handleImgError = () => {
   margin-bottom: 8px;
   overflow: hidden;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  pointer-events: none; /* 让鼠标事件穿透图片 */
 }
 
 .icon-img {
@@ -87,5 +128,6 @@ const handleImgError = () => {
   text-overflow: ellipsis;
   max-width: 90%;
   text-align: center;
+  pointer-events: none;
 }
 </style>
