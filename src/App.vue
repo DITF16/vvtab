@@ -4,9 +4,16 @@
   <div class="app-container">
     <aside class="sidebar">
       <div class="sidebar-top">
-        <div class="group-icon active">🏠</div>
-        <div class="group-icon">💼</div>
-        <div class="group-icon">🎮</div>
+        <div
+          v-for="(group, index) in groups"
+          :key="group.id"
+          class="group-icon"
+          :class="{ active: currentGroupIndex === index }"
+          @click="switchGroup(index)"
+          :title="group.name"
+        >
+          {{ group.icon }}
+        </div>
       </div>
       <div class="sidebar-bottom">
         <div class="setting-btn">⚙️</div>
@@ -24,7 +31,9 @@
 
       <div class="grid-wrapper">
         <GridLayout
-          v-model:layout="layout"
+          v-if="groups[currentGroupIndex]"
+          :key="currentGroupIndex"
+          v-model:layout="currentLayout"
           :col-num="12"
           :row-height="60"
           :is-draggable="true"
@@ -33,7 +42,7 @@
           :margin="[20, 20]"
         >
           <GridItem
-            v-for="item in layout"
+            v-for="item in currentLayout"
             :key="item.i"
             :x="item.x"
             :y="item.y"
@@ -77,16 +86,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { GridLayout, GridItem } from "grid-layout-plus";
 import { useLayoutStorage } from "./hooks/useLayoutStorage";
 import ClockWidget from "./components/widgets/ClockWidget.vue";
 import SearchWidget from "./components/widgets/SearchWidget.vue";
 
-const { layout, loadData, saveData } = useLayoutStorage();
+// 引入新的变量
+const { groups, currentGroupIndex, switchGroup, loadData, saveData } =
+  useLayoutStorage();
 const showSettings = ref(false);
 
+const currentLayout = computed({
+  get() {
+    const group = groups.value?.[currentGroupIndex.value];
+    return group ? group.layout : [];
+  },
+  set(newLayout: any) {
+    const group = groups.value?.[currentGroupIndex.value];
+    if (group) {
+      group.layout = newLayout;
+    }
+  },
+});
+
 onMounted(() => {
+  // 重要：因为换了 STORAGE_KEY，最好清理一下旧的缓存（可选）
+  // chrome.storage.local.clear();
   loadData();
 });
 
@@ -111,29 +137,24 @@ const getComponent = (type: string) => {
 </script>
 
 <style scoped>
-/* 全局容器 */
+/* 样式完全保持你提供的代码不变，直接复用即可 */
 .app-container {
   display: flex;
   height: 100vh;
   width: 100vw;
   overflow: hidden;
   position: relative;
-  z-index: 1; /* 在壁纸之上 */
+  z-index: 1;
 }
-
-/* 背景层 */
 .wallpaper-layer {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  /* 暂时用 CSS 渐变，后续换成 img 标签 */
   background: linear-gradient(120deg, #e0c3fc 0%, #8ec5fc 100%);
   z-index: 0;
 }
-
-/* 左侧侧边栏 */
 .sidebar {
   width: 70px;
   background: rgba(255, 255, 255, 0.2);
@@ -145,7 +166,6 @@ const getComponent = (type: string) => {
   padding: 20px 0;
   border-right: 1px solid rgba(255, 255, 255, 0.2);
 }
-
 .group-icon {
   width: 40px;
   height: 40px;
@@ -159,31 +179,25 @@ const getComponent = (type: string) => {
   transition: all 0.2s;
   background: rgba(255, 255, 255, 0.3);
 }
-
 .group-icon.active {
   background: white;
   color: #333;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
-
-/* 主区域 */
 .main-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow-y: auto; /* 允许垂直滚动 */
+  overflow-y: auto;
 }
-
-/* 顶部栏 */
 .top-bar {
   height: 60px;
   display: flex;
-  justify-content: flex-end; /* 靠右对齐 */
+  justify-content: flex-end;
   align-items: center;
   padding: 0 40px;
 }
-
 .icon-btn {
   background: rgba(255, 255, 255, 0.3);
   border: none;
@@ -197,22 +211,16 @@ const getComponent = (type: string) => {
 .icon-btn:hover {
   background: white;
 }
-
-/* 网格容器：居中且限制宽度 */
 .grid-wrapper {
   width: 100%;
-  max-width: 1200px; /* 限制最大宽度，模仿 iTab */
-  margin: 0 auto; /* 水平居中 */
-  flex: 1; /* 占满剩余高度 */
+  max-width: 1200px;
+  margin: 0 auto;
+  flex: 1;
   padding-top: 20px;
 }
-
-/* 卡片样式 */
 .grid-card-wrapper {
-  /* 去掉 border-radius 和 overflow，让内部组件决定 */
   background: transparent;
 }
-
 .fallback-card {
   width: 100%;
   height: 100%;
@@ -223,8 +231,6 @@ const getComponent = (type: string) => {
   align-items: center;
   font-weight: bold;
 }
-
-/* 简单的模态框样式 */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -238,7 +244,6 @@ const getComponent = (type: string) => {
   align-items: center;
   backdrop-filter: blur(5px);
 }
-
 .modal-content {
   background: white;
   width: 600px;
@@ -248,8 +253,6 @@ const getComponent = (type: string) => {
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
   text-align: center;
 }
-
-/* 隐藏缩放手柄，只在hover显示 */
 :deep(.vgl-item__resizer) {
   opacity: 0;
   border: none !important;
