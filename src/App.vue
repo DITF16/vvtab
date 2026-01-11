@@ -11,16 +11,11 @@
           :class="{ active: currentGroupIndex === index }"
           @click="switchGroup(index)"
           @contextmenu.prevent="onSidebarRightClick(index)"
-          :title="group.name + ' (右键删除)'"
         >
           {{ group.icon }}
         </div>
-
-        <div class="group-icon add-btn" @click="addGroup" title="新建分组">
-          +
-        </div>
+        <div class="group-icon add-btn" @click="addGroup">+</div>
       </div>
-
       <div class="sidebar-bottom">
         <div class="setting-btn">⚙️</div>
       </div>
@@ -29,13 +24,11 @@
     <main class="main-content">
       <header class="top-bar">
         <div class="user-profile">
-          <button class="icon-btn" @click="openSettings">
-            <span class="avatar">👤</span>
-          </button>
+          <button class="icon-btn"><span class="avatar">👤</span></button>
         </div>
       </header>
 
-      <div class="grid-wrapper">
+      <div class="grid-wrapper" @contextmenu.prevent="openBackgroundMenu">
         <GridLayout
           v-if="groups[currentGroupIndex]"
           :key="currentGroupIndex"
@@ -60,10 +53,10 @@
             @resized="handleSave"
             @contextmenu.prevent.stop="openWidgetMenu($event, item)"
           >
-            <component :is="getComponent(item.type)" />
+            <component :is="getComponent(item.type)" v-bind="item" />
 
             <div
-              v-if="!['Clock', 'Search'].includes(item.type)"
+              v-if="!['Clock', 'Search', 'Shortcut'].includes(item.type)"
               class="fallback-card"
             >
               {{ item.title }}
@@ -72,7 +65,7 @@
         </GridLayout>
 
         <div v-if="currentLayout.length === 0" class="empty-tip">
-          当前分组为空，快去添加组件吧
+          右键点击空白处添加图标
         </div>
       </div>
     </main>
@@ -83,30 +76,62 @@
       :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
       @click.stop
     >
-      <div class="menu-header">移动组件到...</div>
-      <div
-        v-for="(group, index) in groups"
-        :key="group.id"
-        class="menu-item"
-        v-show="index !== currentGroupIndex"
-        @click="handleMoveWidget(index)"
-      >
-        <span>{{ group.icon }} {{ group.name }}</span>
-      </div>
-      <div class="divider"></div>
-      <div class="menu-item delete" @click="handleDeleteWidget">
-        🗑️ 删除组件
-      </div>
+      <template v-if="contextMenu.type === 'widget'">
+        <div class="menu-header">管理组件</div>
+        <div class="menu-item delete" @click="handleDeleteWidget">
+          🗑️ 删除此组件
+        </div>
+      </template>
+
+      <template v-else-if="contextMenu.type === 'background'">
+        <div class="menu-header">页面菜单</div>
+        <div class="menu-item" @click="openAddShortcutModal">➕ 添加图标</div>
+        <div class="menu-item" @click="openWidgetStore">🧩 添加小组件</div>
+        <div class="divider"></div>
+        <div class="menu-item">🖼️ 更换壁纸</div>
+      </template>
     </div>
 
     <div
-      v-if="showSettings"
+      v-if="showShortcutModal"
       class="modal-overlay"
-      @click.self="showSettings = false"
+      @click.self="showShortcutModal = false"
     >
-      <div class="modal-content">
-        <h2>设置中心</h2>
-        <button @click="showSettings = false">关闭</button>
+      <div class="modal-content form-modal">
+        <h3>添加网站图标</h3>
+        <div class="form-item">
+          <label>网站名称</label>
+          <input
+            v-model="shortcutForm.title"
+            type="text"
+            placeholder="例如：哔哩哔哩"
+          />
+        </div>
+        <div class="form-item">
+          <label>网站地址 (URL)</label>
+          <input
+            v-model="shortcutForm.url"
+            type="text"
+            placeholder="https://www.bilibili.com"
+          />
+        </div>
+        <div class="form-item">
+          <label>图标地址 (选填)</label>
+          <input
+            v-model="shortcutForm.icon"
+            type="text"
+            placeholder="留空则自动获取"
+          />
+        </div>
+
+        <div class="form-actions">
+          <button class="btn cancel" @click="showShortcutModal = false">
+            取消
+          </button>
+          <button class="btn confirm" @click="confirmAddShortcut">
+            确定添加
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -118,6 +143,7 @@ import { GridLayout, GridItem } from "grid-layout-plus";
 import { useLayoutStorage } from "./hooks/useLayoutStorage";
 import ClockWidget from "./components/widgets/ClockWidget.vue";
 import SearchWidget from "./components/widgets/SearchWidget.vue";
+import ShortcutWidget from "./components/widgets/ShortcutWidget.vue"; // 引入新组件
 
 const {
   groups,
@@ -127,11 +153,18 @@ const {
   saveData,
   addGroup,
   deleteGroup,
-  moveWidgetToGroup,
 } = useLayoutStorage();
-const showSettings = ref(false);
 
-// 可读写 computed，安全绑定 layout，避免对象可能为 undefined 的错误
+const showShortcutModal = ref(false);
+
+// 表单数据
+const shortcutForm = reactive({
+  title: "",
+  url: "",
+  icon: "",
+});
+
+// 计算属性处理布局
 const currentLayout = computed({
   get() {
     const idx = currentGroupIndex?.value ?? 0;
@@ -146,77 +179,132 @@ const currentLayout = computed({
   },
 });
 
-// 右键菜单状态管理
+// 右键菜单状态
 const contextMenu = reactive({
   visible: false,
   x: 0,
   y: 0,
-  targetWidgetId: "", // 记录当前右键点击的是哪个组件
+  type: "background", // 'widget' | 'background'
+  targetWidgetId: "",
 });
 
 onMounted(() => {
-  // chrome.storage.local.clear(); // 首次运行时解开注释清理旧数据
   loadData();
 });
 
 const handleSave = () => saveData();
-const openSettings = () => (showSettings.value = true);
 
-// 获取组件类型
 const getComponent = (type: string) => {
   switch (type) {
     case "Clock":
       return ClockWidget;
     case "Search":
       return SearchWidget;
+    case "Shortcut":
+      return ShortcutWidget; // 注册新组件
     default:
       return null;
   }
 };
 
-// --- 交互逻辑 ---
+// --- 右键菜单逻辑 ---
 
-// 1. 侧边栏右键删除
-const onSidebarRightClick = (index: number) => {
-  deleteGroup(index);
+// 1. 点击背景：打开添加菜单
+const openBackgroundMenu = (e: MouseEvent) => {
+  contextMenu.visible = true;
+  contextMenu.type = "background";
+  contextMenu.x = e.clientX;
+  contextMenu.y = e.clientY;
+  contextMenu.targetWidgetId = "";
 };
 
-// 2. 打开组件右键菜单
+// 2. 点击组件：打开删除菜单
 const openWidgetMenu = (e: MouseEvent, item: any) => {
   contextMenu.visible = true;
+  contextMenu.type = "widget";
   contextMenu.x = e.clientX;
   contextMenu.y = e.clientY;
   contextMenu.targetWidgetId = item.i;
 };
 
-// 3. 关闭右键菜单
+// 3. 关闭菜单
 const closeContextMenu = () => {
   contextMenu.visible = false;
 };
 
-// 4. 执行移动操作
-const handleMoveWidget = (targetGroupIndex: number) => {
-  moveWidgetToGroup(contextMenu.targetWidgetId, targetGroupIndex);
-  closeContextMenu();
-};
+// --- 功能逻辑 ---
 
-// 5. 执行删除组件操作 (使用 currentLayout 安全修改)
+const onSidebarRightClick = (index: number) => deleteGroup(index);
+
 const handleDeleteWidget = () => {
   const layout = currentLayout.value;
   const idx = layout.findIndex((i: any) => i.i === contextMenu.targetWidgetId);
   if (idx > -1) {
-    // 直接修改数组（如果绑定的是原数组，会同步到 groups）
     layout.splice(idx, 1);
-    // 触发 setter 以确保响应性（如果需要则重新赋值）
     currentLayout.value = [...layout];
     saveData();
   }
   closeContextMenu();
 };
+
+const openWidgetStore = () => {
+  alert("这里弹出之前的组件中心（代码暂略，专注实现快捷方式）");
+  closeContextMenu();
+};
+
+// --- 添加图标逻辑 ---
+
+const openAddShortcutModal = () => {
+  // 重置表单
+  shortcutForm.title = "";
+  shortcutForm.url = "";
+  shortcutForm.icon = "";
+  showShortcutModal.value = true;
+  closeContextMenu();
+};
+
+const confirmAddShortcut = () => {
+  if (!shortcutForm.title || !shortcutForm.url) {
+    alert("请输入名称和网址");
+    return;
+  }
+
+  // 简单的自动补全 https
+  let finalUrl = shortcutForm.url;
+  if (!finalUrl.startsWith("http")) {
+    finalUrl = "https://" + finalUrl;
+  }
+
+  // 找一个合适的位置 (简单的追加到最后)
+  const layout = currentLayout.value;
+  // 找最底部的 y
+  const yPos = layout.reduce(
+    (max: number, item: any) => Math.max(max, item.y + item.h),
+    0
+  );
+
+  const newWidget = {
+    x: 0,
+    y: yPos,
+    w: 1, // 图标默认 1x1
+    h: 1,
+    i: `shortcut-${Date.now()}`,
+    type: "Shortcut",
+    title: shortcutForm.title,
+    url: finalUrl,
+    icon: shortcutForm.icon, // 如果为空，组件内部会自动去 fetch favicon
+  };
+
+  layout.push(newWidget);
+  currentLayout.value = [...layout]; // 触发更新
+  saveData();
+
+  showShortcutModal.value = false;
+};
 </script>
 
 <style scoped>
-/* --- 保持原有的基础样式 (这里省略重复部分，只列出修改和新增的) --- */
+/* 复用之前的样式，增加表单和弹窗样式 */
 .app-container {
   display: flex;
   height: 100vh;
@@ -278,6 +366,7 @@ const handleDeleteWidget = () => {
   margin: 0 auto;
   flex: 1;
   padding-top: 20px;
+  min-height: 500px; /* 确保有足够区域点击右键 */
 }
 .grid-card-wrapper {
   background: transparent;
@@ -305,15 +394,6 @@ const handleDeleteWidget = () => {
   align-items: center;
   backdrop-filter: blur(5px);
 }
-.modal-content {
-  background: white;
-  width: 600px;
-  height: 400px;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
-  text-align: center;
-}
 :deep(.vgl-item__resizer) {
   opacity: 0;
   border: none !important;
@@ -326,8 +406,6 @@ const handleDeleteWidget = () => {
     transparent 50%
   );
 }
-
-/* --- 新增样式：侧边栏图标 --- */
 .group-icon {
   width: 40px;
   height: 40px;
@@ -351,44 +429,38 @@ const handleDeleteWidget = () => {
 .group-icon:hover {
   background: rgba(255, 255, 255, 0.5);
 }
-
-/* 加号按钮样式 */
 .add-btn {
   border: 1px dashed rgba(255, 255, 255, 0.6);
   background: transparent;
   color: white;
   font-weight: bold;
 }
-
-/* 空状态提示 */
 .empty-tip {
   text-align: center;
   margin-top: 100px;
   color: rgba(255, 255, 255, 0.7);
   font-size: 1.1rem;
+  pointer-events: none; /* 防止遮挡右键 */
 }
 
-/* --- 新增样式：右键菜单 (Context Menu) --- */
+/* --- 右键菜单 --- */
 .context-menu {
   position: fixed;
   z-index: 9999;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
   width: 160px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.5);
-  animation: fadeIn 0.1s ease-out;
 }
-
 .menu-header {
   padding: 8px 12px;
   font-size: 12px;
   color: #999;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
-
 .menu-item {
   padding: 10px 12px;
   font-size: 14px;
@@ -396,34 +468,76 @@ const handleDeleteWidget = () => {
   cursor: pointer;
   display: flex;
   align-items: center;
-  transition: background 0.1s;
 }
-
 .menu-item:hover {
   background: rgba(0, 0, 0, 0.05);
 }
-
 .divider {
   height: 1px;
   background: rgba(0, 0, 0, 0.05);
   margin: 4px 0;
 }
-
 .menu-item.delete {
   color: #ff4d4f;
 }
-.menu-item.delete:hover {
-  background: #fff1f0;
+
+/* --- 表单弹窗样式 --- */
+.form-modal {
+  width: 400px;
+  background: white;
+  padding: 25px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.form-modal h3 {
+  margin: 0 0 10px 0;
+  color: #333;
+}
+.form-item label {
+  display: block;
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 5px;
+}
+.form-item input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  background: #f9f9f9;
+  box-sizing: border-box;
+  outline: none;
+  transition: 0.2s;
+}
+.form-item input:focus {
+  border-color: #333;
+  background: white;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+.btn {
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+}
+.btn.cancel {
+  background: #f5f5f5;
+  color: #666;
+}
+.btn.confirm {
+  background: #333;
+  color: white;
+}
+.btn:hover {
+  opacity: 0.9;
 }
 </style>
