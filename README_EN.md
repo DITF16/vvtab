@@ -36,7 +36,7 @@ We are actively working on the following features. Contributions are welcome!
 - [ ] **Config Export/Import**: Support exporting user settings to JSON.
 - [ ] **Cloud Backup**: Sync configurations across devices via the cloud.
 - [ ] **More Components**: Weather, To-Do List, Calendar, RSS Reader, etc.
-- [ ] **Live2D Integration**: Add Live2D pets/assistants to your new tab.
+- [x] **Live2D Integration**: Add Live2D pets/assistants to your new tab.
 - [ ] **LLM Integration**: Access Large Language Models directly from the start page.
 
 ## 🛠️ Getting Started

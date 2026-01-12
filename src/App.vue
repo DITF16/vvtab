@@ -4,6 +4,12 @@
     :style="{ backgroundImage: `url(${currentWallpaperUrl})` }"
   ></div>
 
+  <div class="app-container">
+    <router-view />
+
+    <Live2dWidget />
+  </div>
+
   <div class="app-container" @click="closeContextMenu">
     <aside class="sidebar">
       <div class="sidebar-top">
@@ -303,6 +309,7 @@ import { useLayoutStorage } from "./hooks/useLayoutStorage";
 import ClockWidget from "./components/widgets/ClockWidget.vue";
 import SearchWidget from "./components/widgets/SearchWidget.vue";
 import ShortcutWidget from "./components/widgets/ShortcutWidget.vue";
+import Live2dWidget from "./components/widgets/Live2dWidget.vue";
 
 // --- 常用图标库 (30个) ---
 const GROUP_ICONS = [
@@ -547,9 +554,9 @@ const deleteWallpaper = (index: number) => {
   if (
     wallpaperConfig.value.staticImage === deletedUrl &&
     wallpaperConfig.value.images.length > 0
-    )
-      // images[0] may be undefined in TS narrowing; provide a safe fallback
-      wallpaperConfig.value.staticImage = wallpaperConfig.value.images[0] ?? "";
+  )
+    // images[0] may be undefined in TS narrowing; provide a safe fallback
+    wallpaperConfig.value.staticImage = wallpaperConfig.value.images[0] ?? "";
   handleSave();
 };
 const triggerFileUpload = () => {

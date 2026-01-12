@@ -4,6 +4,11 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "types": ["chrome", "vite/client"],
 
+    /* ✅✅✅ 核心修复：添加这两行 ✅✅✅ */
+    /* 告诉 TS 我们用的是最新版 JS，包含 Promise, includes 等特性 */
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": false,

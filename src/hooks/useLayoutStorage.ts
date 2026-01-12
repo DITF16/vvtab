@@ -37,12 +37,10 @@ const defaultGroups: Group[] = [
 const defaultWallpaper: WallpaperConfig = {
   type: "static",
   images: [
-    "https://bing.com/th?id=OHR.BlueHourItaly_ZH-CN0640826569_1920x1080.jpg",
-    "https://bing.com/th?id=OHR.SvalbardPolarBear_ZH-CN0337839352_1920x1080.jpg",
-    "https://bing.com/th?id=OHR.RedTailedHawk_ZH-CN0102661022_1920x1080.jpg",
+    // 使用 picsum 的随机图，或者你自己找个稳定的图
+    "https://picsum.photos/1920/1080",
   ],
-  staticImage:
-    "https://bing.com/th?id=OHR.BlueHourItaly_ZH-CN0640826569_1920x1080.jpg",
+  staticImage: "https://picsum.photos/1920/1080",
   interval: 15,
 };
 

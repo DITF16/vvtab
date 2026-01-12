@@ -1,13 +1,21 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import path from "path";
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
-  // 解决 grid-layout-plus 可能出现的 global 报错
-  define: {
-    global: "window",
+  resolve: {
+    // ✅✅✅ 核心修复：强制 Vite 只打包一个版本的 pixi.js
+    dedupe: ["pixi.js"],
+
+    alias: {
+      "@": path.resolve(__dirname, "src"),
+      // 再次加固：确保所有 import 都指向 node_modules 根目录下的 pixi
+      "pixi.js": path.resolve(__dirname, "node_modules/pixi.js"),
+    },
   },
-  // 确保打包后路径正确（避免空白页）
-  base: "./",
+  build: {
+    // 消除打包大小警告 (可选)
+    chunkSizeWarningLimit: 1500,
+  },
 });
