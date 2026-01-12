@@ -13,11 +13,12 @@
           class="group-icon"
           :class="{ active: currentGroupIndex === index }"
           @click="switchGroup(index)"
-          @contextmenu.prevent="onSidebarRightClick(index)"
+          @contextmenu.prevent.stop="openSidebarMenu($event, index)"
+          :title="group.name"
         >
           {{ group.icon }}
         </div>
-        <div class="group-icon add-btn" @click="addGroup">+</div>
+        <div class="group-icon add-btn" @click="openAddGroupModal">+</div>
       </div>
       <div class="sidebar-bottom">
         <div class="setting-btn" @click="openWidgetStore">⚙️</div>
@@ -94,6 +95,57 @@
         <div class="divider"></div>
         <div class="menu-item" @click="openWallpaperSettings">🖼️ 更换壁纸</div>
       </template>
+
+      <template v-else-if="contextMenu.type === 'sidebar'">
+        <div class="menu-header">分组管理</div>
+        <div class="menu-item" @click="openEditGroupModal">✏️ 编辑分组</div>
+        <div class="divider"></div>
+        <div class="menu-item delete" @click="handleDeleteGroup">
+          🗑️ 删除分组
+        </div>
+      </template>
+    </div>
+
+    <div
+      v-if="showGroupModal"
+      class="modal-overlay"
+      @click.self="showGroupModal = false"
+    >
+      <div class="modal-content form-modal group-modal">
+        <h3>{{ isEditingGroup ? "编辑分组" : "新建分组" }}</h3>
+
+        <div class="form-item">
+          <label>分组名称</label>
+          <input
+            v-model="groupForm.name"
+            type="text"
+            placeholder="例如：娱乐、工作..."
+            maxlength="6"
+          />
+        </div>
+
+        <div class="form-item">
+          <label>选择图标</label>
+          <div class="icon-selector">
+            <div
+              v-for="icon in GROUP_ICONS"
+              :key="icon"
+              class="icon-option"
+              :class="{ active: groupForm.icon === icon }"
+              @click="groupForm.icon = icon"
+            >
+              {{ icon }}
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn cancel" @click="showGroupModal = false">
+            取消
+          </button>
+          <button class="btn confirm" @click="confirmSaveGroup">保存</button>
+        </div>
+      </div>
     </div>
 
     <div
@@ -150,7 +202,6 @@
             ×
           </button>
         </div>
-
         <div class="wp-body">
           <div class="mode-switch">
             <button
@@ -166,7 +217,6 @@
               轮播模式
             </button>
           </div>
-
           <div
             v-if="wallpaperConfig.type === 'rotation'"
             class="rotation-settings"
@@ -180,7 +230,6 @@
               class="interval-input"
             />
           </div>
-
           <div class="image-grid">
             <div
               v-for="(img, idx) in wallpaperConfig.images"
@@ -198,49 +247,46 @@
                 ×
               </button>
             </div>
-
             <div
-              class="image-item add-wp-btn"
+              class="image-item add-wp"
               @click="isAddingWallpaper = true"
+              v-if="!isAddingWallpaper"
             >
-              <span class="plus-icon">+</span>
-              <span class="text">添加壁纸</span>
+              <span class="plus-icon">+</span><span class="text">添加壁纸</span>
             </div>
-          </div>
-
-          <div v-if="isAddingWallpaper" class="add-overlay">
-            <div class="overlay-header">
-              <h4>添加新壁纸</h4>
-              <button class="close-overlay" @click="isAddingWallpaper = false">
-                取消
-              </button>
-            </div>
-
-            <div class="overlay-content">
-              <div class="upload-zone" @click="triggerFileUpload">
-                <input
-                  type="file"
-                  ref="fileInputRef"
-                  accept="image/*"
-                  style="display: none"
-                  @change="handleFileSelect"
-                />
-                <span class="upload-icon">📂</span>
-                <p>点击上传本地图片</p>
-                <span class="sub-text">支持 JPG, PNG, WEBP (最大 3MB)</span>
-              </div>
-
-              <div class="divider-text">或者</div>
-
-              <div class="url-zone">
-                <input
-                  v-model="newWallpaperUrl"
-                  placeholder="输入网络图片地址 (https://...)"
-                  @keydown.enter="addNewWallpaper"
-                />
-                <button class="confirm-btn" @click="addNewWallpaper">
-                  确认添加
+            <div v-if="isAddingWallpaper" class="add-overlay">
+              <div class="overlay-header">
+                <h4>添加新壁纸</h4>
+                <button
+                  class="close-overlay"
+                  @click="isAddingWallpaper = false"
+                >
+                  取消
                 </button>
+              </div>
+              <div class="overlay-content">
+                <div class="upload-zone" @click="triggerFileUpload">
+                  <input
+                    type="file"
+                    ref="fileInputRef"
+                    accept="image/*"
+                    style="display: none"
+                    @change="handleFileSelect"
+                  />
+                  <span class="upload-icon">📂</span>
+                  <p>点击上传本地图片</p>
+                </div>
+                <div class="divider-text">或者</div>
+                <div class="url-zone">
+                  <input
+                    v-model="newWallpaperUrl"
+                    placeholder="输入网络图片地址"
+                    @keydown.enter="addNewWallpaper"
+                  />
+                  <button class="confirm-btn" @click="addNewWallpaper">
+                    确认添加
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -258,46 +304,83 @@ import ClockWidget from "./components/widgets/ClockWidget.vue";
 import SearchWidget from "./components/widgets/SearchWidget.vue";
 import ShortcutWidget from "./components/widgets/ShortcutWidget.vue";
 
-// --- 1. 引入数据存储 ---
+// --- 常用图标库 (30个) ---
+const GROUP_ICONS = [
+  "🏠",
+  "💼",
+  "🎮",
+  "❤️",
+  "⭐",
+  "🔥",
+  "🚀",
+  "💡",
+  "📝",
+  "📷",
+  "🎵",
+  "🎨",
+  "⚽",
+  "🏀",
+  "🍔",
+  "☕",
+  "🍺",
+  "✈️",
+  "🚗",
+  "🚲",
+  "💻",
+  "📱",
+  "📚",
+  "🎓",
+  "💰",
+  "🎁",
+  "🎉",
+  "📅",
+  "⚙️",
+  "🔍",
+];
+
 const {
   groups,
   currentGroupIndex,
-  wallpaperConfig, // 拿到壁纸配置
+  wallpaperConfig,
   switchGroup,
   loadData,
   saveData,
   addGroup,
+  updateGroup, // 引入更新方法
   deleteGroup,
   moveWidgetToGroup,
   addWidgetToLayout,
 } = useLayoutStorage();
 
-// --- 2. 状态定义 ---
+// --- 状态 ---
 const showShortcutModal = ref(false);
-const showWallpaperModal = ref(false); // 壁纸弹窗显隐
-const isAddingWallpaper = ref(false); // 是否显示输入框区域
-const newWallpaperUrl = ref(""); // 网络图片URL绑定
-const fileInputRef = ref<HTMLInputElement | null>(null); // 本地文件Input的引用
+const showWallpaperModal = ref(false);
+const showGroupModal = ref(false); // 分组弹窗
+const isEditingGroup = ref(false); // 是否是编辑模式
+const editingGroupIndex = ref(-1); // 当前正在编辑/操作的分组索引
 
-// 轮播相关状态
+const isAddingWallpaper = ref(false);
+const newWallpaperUrl = ref("");
+const fileInputRef = ref<HTMLInputElement | null>(null);
+
 const rotationIndex = ref(0);
 let rotationTimer: any = null;
 
 // 表单数据
 const shortcutForm = reactive({ title: "", url: "", icon: "" });
+const groupForm = reactive({ name: "", icon: "🏠" }); // 分组表单
 
 // 右键菜单状态
 const contextMenu = reactive({
   visible: false,
   x: 0,
   y: 0,
-  type: "background",
+  type: "background", // 'widget' | 'background' | 'sidebar'
   targetWidgetId: "",
+  targetGroupIndex: -1, // 记录右键点击的是哪个分组
 });
 
-// --- 3. 计算属性 ---
-
-// 安全获取当前布局
+// --- 计算属性 ---
 const currentLayout = computed({
   get() {
     const idx = currentGroupIndex?.value ?? 0;
@@ -309,39 +392,27 @@ const currentLayout = computed({
   },
 });
 
-// 计算当前背景图（核心逻辑）
 const currentWallpaperUrl = computed(() => {
   const cfg = wallpaperConfig.value;
-  // 1. 如果没有图片，返回空
   if (!cfg.images || cfg.images.length === 0) return "";
-
-  // 2. 单张模式
-  if (cfg.type === "static") {
-    return cfg.staticImage || cfg.images[0];
-  }
-
-  // 3. 轮播模式
+  if (cfg.type === "static") return cfg.staticImage || cfg.images[0];
   const idx = rotationIndex.value % cfg.images.length;
   return cfg.images[idx];
 });
 
-// --- 4. 生命周期与监听 ---
+// --- 生命周期 ---
 onMounted(() => {
   loadData();
   startRotationTimer();
 });
-
 onUnmounted(() => {
   if (rotationTimer) clearInterval(rotationTimer);
 });
-
-// 监听配置变化，重新启动定时器
 watch(() => wallpaperConfig.value.type, startRotationTimer);
 watch(() => wallpaperConfig.value.interval, startRotationTimer);
 
 function startRotationTimer() {
   if (rotationTimer) clearInterval(rotationTimer);
-
   if (wallpaperConfig.value.type === "rotation") {
     const ms = (wallpaperConfig.value.interval || 15) * 60 * 1000;
     rotationTimer = setInterval(() => {
@@ -352,95 +423,68 @@ function startRotationTimer() {
 
 const handleSave = () => saveData();
 
-// --- 5. 壁纸管理逻辑 (本次修改的核心) ---
+// --- 分组管理逻辑 (核心新增) ---
 
-const openWallpaperSettings = () => {
-  showWallpaperModal.value = true;
+// 1. 打开添加弹窗
+const openAddGroupModal = () => {
+  isEditingGroup.value = false;
+  groupForm.name = "";
+  // GROUP_ICONS[0] may be undefined if the array is empty — provide a fallback to satisfy TS
+  groupForm.icon = GROUP_ICONS[0] ?? "🏠";
+  showGroupModal.value = true;
+};
+
+// 2. 打开编辑弹窗
+const openEditGroupModal = () => {
+  const index = contextMenu.targetGroupIndex;
+  const group = groups.value[index];
+  if (!group) return;
+
+  isEditingGroup.value = true;
+  editingGroupIndex.value = index;
+  // 回填数据
+  groupForm.name = group.name;
+  groupForm.icon = group.icon;
+
+  showGroupModal.value = true;
   closeContextMenu();
 };
 
-const changeWallpaperMode = (mode: "static" | "rotation") => {
-  wallpaperConfig.value.type = mode;
-  handleSave();
-};
-
-const selectWallpaper = (url: string) => {
-  if (wallpaperConfig.value.type === "static") {
-    wallpaperConfig.value.staticImage = url;
-    handleSave();
+// 3. 确认保存分组
+const confirmSaveGroup = () => {
+  if (!groupForm.name) {
+    alert("请输入分组名称");
+    return;
   }
-};
 
-const deleteWallpaper = (index: number) => {
-  const deletedUrl = wallpaperConfig.value.images[index];
-  wallpaperConfig.value.images.splice(index, 1);
-
-  // 如果删掉的是当前选中的，重置选中
-  if (
-    wallpaperConfig.value.staticImage === deletedUrl &&
-    wallpaperConfig.value.images.length > 0
-  ) {
-    wallpaperConfig.value.staticImage = wallpaperConfig.value.images[0] ?? "";
+  if (isEditingGroup.value) {
+    // 更新
+    updateGroup(editingGroupIndex.value, groupForm.name, groupForm.icon);
+  } else {
+    // 新增
+    addGroup(groupForm.name, groupForm.icon);
   }
-  handleSave();
+  showGroupModal.value = false;
 };
 
-// 触发隐藏的文件输入框点击
-const triggerFileUpload = () => {
-  fileInputRef.value?.click();
-};
-
-// 处理文件选择（转 Base64）
-const handleFileSelect = (event: Event) => {
-  const input = event.target as HTMLInputElement;
-  if (input.files && input.files[0]) {
-    const file = input.files[0];
-
-    // 限制大小 3MB
-    if (file.size > 3 * 1024 * 1024) {
-      alert("图片太大啦！建议上传 3MB 以内的图片，否则浏览器会变卡哦。");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const base64String = e.target?.result as string;
-      if (base64String) {
-        addWallpaperToConfig(base64String);
-        isAddingWallpaper.value = false;
-      }
-    };
-    reader.readAsDataURL(file);
+// 4. 删除分组
+const handleDeleteGroup = () => {
+  const index = contextMenu.targetGroupIndex;
+  // 防护：groups.value[index] 可能为 undefined
+  const name = groups.value[index]?.name ?? "";
+  if (confirm(`确定要删除分组“${name}”吗？\n该操作无法撤销。`)) {
+    deleteGroup(index);
   }
+  closeContextMenu();
 };
 
-// 添加网络图片
-const addNewWallpaper = () => {
-  if (newWallpaperUrl.value) {
-    addWallpaperToConfig(newWallpaperUrl.value);
-    newWallpaperUrl.value = "";
-    isAddingWallpaper.value = false;
-  }
-};
-
-// 统一添加逻辑 helper
-const addWallpaperToConfig = (urlOrBase64: string) => {
-  wallpaperConfig.value.images.push(urlOrBase64);
-  // 如果是第一张，设为默认
-  if (wallpaperConfig.value.images.length === 1) {
-    wallpaperConfig.value.staticImage = urlOrBase64;
-  }
-  handleSave();
-};
-
-// --- 6. 右键菜单逻辑 ---
+// --- 右键菜单逻辑 ---
 
 const openBackgroundMenu = (e: MouseEvent) => {
   contextMenu.visible = true;
   contextMenu.type = "background";
   contextMenu.x = e.clientX;
   contextMenu.y = e.clientY;
-  contextMenu.targetWidgetId = "";
 };
 
 const openWidgetMenu = (e: MouseEvent, item: any) => {
@@ -451,14 +495,20 @@ const openWidgetMenu = (e: MouseEvent, item: any) => {
   contextMenu.targetWidgetId = item.i;
 };
 
+// 新增：侧边栏右键菜单
+const openSidebarMenu = (e: MouseEvent, index: number) => {
+  contextMenu.visible = true;
+  contextMenu.type = "sidebar";
+  contextMenu.x = e.clientX;
+  contextMenu.y = e.clientY;
+  contextMenu.targetGroupIndex = index;
+};
+
 const closeContextMenu = () => {
   contextMenu.visible = false;
 };
 
-// --- 7. 其他功能逻辑 (快捷方式、组件等) ---
-
-const onSidebarRightClick = (index: number) => deleteGroup(index);
-
+// --- 其他逻辑 ---
 const handleMoveWidget = (targetGroupIndex: number) => {
   moveWidgetToGroup(contextMenu.targetWidgetId, targetGroupIndex);
   closeContextMenu();
@@ -475,7 +525,66 @@ const handleDeleteWidget = () => {
   closeContextMenu();
 };
 
+// 简化的逻辑引用...
 const openWidgetStore = () => addWidgetToLayout("Memo");
+const openWallpaperSettings = () => {
+  showWallpaperModal.value = true;
+  closeContextMenu();
+};
+const changeWallpaperMode = (mode: "static" | "rotation") => {
+  wallpaperConfig.value.type = mode;
+  handleSave();
+};
+const selectWallpaper = (url: string) => {
+  if (wallpaperConfig.value.type === "static") {
+    wallpaperConfig.value.staticImage = url;
+    handleSave();
+  }
+};
+const deleteWallpaper = (index: number) => {
+  const deletedUrl = wallpaperConfig.value.images[index];
+  wallpaperConfig.value.images.splice(index, 1);
+  if (
+    wallpaperConfig.value.staticImage === deletedUrl &&
+    wallpaperConfig.value.images.length > 0
+    )
+      // images[0] may be undefined in TS narrowing; provide a safe fallback
+      wallpaperConfig.value.staticImage = wallpaperConfig.value.images[0] ?? "";
+  handleSave();
+};
+const triggerFileUpload = () => {
+  fileInputRef.value?.click();
+};
+const handleFileSelect = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  if (input.files && input.files[0]) {
+    const file = input.files[0];
+    if (file.size > 3 * 1024 * 1024)
+      return alert("图片太大啦！建议上传 3MB 以内的图片");
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64 = e.target?.result as string;
+      if (base64) {
+        addNewWallpaperHelper(base64);
+        isAddingWallpaper.value = false;
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+};
+const addNewWallpaper = () => {
+  if (newWallpaperUrl.value) {
+    addNewWallpaperHelper(newWallpaperUrl.value);
+    newWallpaperUrl.value = "";
+    isAddingWallpaper.value = false;
+  }
+};
+const addNewWallpaperHelper = (url: string) => {
+  wallpaperConfig.value.images.push(url);
+  if (wallpaperConfig.value.images.length === 1)
+    wallpaperConfig.value.staticImage = url;
+  handleSave();
+};
 
 const openAddShortcutModal = () => {
   shortcutForm.title = "";
@@ -484,21 +593,16 @@ const openAddShortcutModal = () => {
   showShortcutModal.value = true;
   closeContextMenu();
 };
-
 const confirmAddShortcut = () => {
-  if (!shortcutForm.title || !shortcutForm.url) {
-    alert("请输入名称和网址");
-    return;
-  }
+  if (!shortcutForm.title || !shortcutForm.url)
+    return alert("请输入名称和网址");
   let finalUrl = shortcutForm.url;
   if (!finalUrl.startsWith("http")) finalUrl = "https://" + finalUrl;
-
   const layout = currentLayout.value;
   const yPos = layout.reduce(
     (max: number, item: any) => Math.max(max, item.y + item.h),
     0
   );
-
   layout.push({
     x: 0,
     y: yPos,
@@ -510,13 +614,11 @@ const confirmAddShortcut = () => {
     url: finalUrl,
     icon: shortcutForm.icon,
   });
-
   currentLayout.value = [...layout];
   handleSave();
   showShortcutModal.value = false;
 };
 
-// 组件映射
 const getComponent = (type: string) => {
   switch (type) {
     case "Clock":
@@ -532,7 +634,7 @@ const getComponent = (type: string) => {
 </script>
 
 <style scoped>
-/* 基础容器 */
+/* 保持原有基础样式不变，仅补充新增样式 */
 .app-container {
   display: flex;
   height: 100vh;
@@ -541,17 +643,16 @@ const getComponent = (type: string) => {
   position: relative;
   z-index: 1;
 }
-/* 壁纸层：修改为 background-image */
 .wallpaper-layer {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: #333; /* 兜底色 */
+  background-color: #333;
   background-size: cover;
   background-position: center;
-  transition: background-image 0.5s ease-in-out; /* 切换时的淡入淡出效果 */
+  transition: background-image 0.5s ease-in-out;
   z-index: 0;
 }
 .sidebar {
@@ -763,18 +864,50 @@ const getComponent = (type: string) => {
 .btn:hover {
   opacity: 0.9;
 }
-/* --- 壁纸弹窗样式优化 --- */
+
+/* --- 分组弹窗特有样式 --- */
+.group-modal {
+  width: 450px;
+}
+.icon-selector {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+}
+.icon-option {
+  height: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 20px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: 0.2s;
+}
+.icon-option:hover {
+  background: #f0f0f0;
+}
+.icon-option.active {
+  background: #333;
+  color: white;
+}
+
+/* 壁纸弹窗 (复用) */
 .wallpaper-modal {
-  width: 700px; /* 稍微加宽一点 */
+  width: 700px;
   height: 550px;
   background: white;
   border-radius: 16px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  position: relative; /* 为覆盖层做定位基准 */
+  position: relative;
 }
-
 .modal-header {
   padding: 15px 25px;
   border-bottom: 1px solid #f0f0f0;
@@ -793,20 +926,13 @@ const getComponent = (type: string) => {
   font-size: 24px;
   cursor: pointer;
   color: #999;
-  transition: 0.2s;
 }
-.close-btn:hover {
-  color: #333;
-}
-
 .wp-body {
   padding: 25px;
   flex: 1;
   overflow-y: auto;
   position: relative;
 }
-
-/* 模式切换 */
 .mode-switch {
   display: flex;
   gap: 10px;
@@ -824,14 +950,12 @@ const getComponent = (type: string) => {
   cursor: pointer;
   color: #666;
   font-weight: bold;
-  transition: 0.2s;
 }
 .mode-switch button.active {
   background: white;
   color: #333;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
-
 .rotation-settings {
   margin-bottom: 20px;
   font-size: 14px;
@@ -847,14 +971,11 @@ const getComponent = (type: string) => {
   border-radius: 4px;
   text-align: center;
 }
-
-/* 图片网格 */
 .image-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 15px;
 }
-
 .image-item {
   aspect-ratio: 16/9;
   border-radius: 12px;
@@ -863,11 +984,6 @@ const getComponent = (type: string) => {
   cursor: pointer;
   border: 3px solid transparent;
   background: #eee;
-  transition: all 0.2s;
-}
-.image-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 .image-item.selected {
   border-color: #333;
@@ -877,7 +993,6 @@ const getComponent = (type: string) => {
   height: 100%;
   object-fit: cover;
 }
-
 .del-img-btn {
   position: absolute;
   top: 8px;
@@ -890,7 +1005,6 @@ const getComponent = (type: string) => {
   height: 24px;
   cursor: pointer;
   opacity: 0;
-  transition: 0.2s;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -898,9 +1012,7 @@ const getComponent = (type: string) => {
 .image-item:hover .del-img-btn {
   opacity: 1;
 }
-
-/* 添加按钮样式 */
-.add-wp-btn {
+.add-wp {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -908,15 +1020,14 @@ const getComponent = (type: string) => {
   border: 2px dashed #ddd;
   background: #fafafa;
   color: #999;
+  cursor: pointer;
 }
-.add-wp-btn:hover {
+.add-wp:hover {
   border-color: #999;
   color: #666;
-  background: #f0f0f0;
 }
 .plus-icon {
   font-size: 32px;
-  font-weight: 300;
   line-height: 1;
   margin-bottom: 5px;
 }
@@ -924,7 +1035,7 @@ const getComponent = (type: string) => {
   font-size: 12px;
 }
 
-/* === 核心优化：全屏覆盖层样式 === */
+/* 覆盖层 */
 .add-overlay {
   position: absolute;
   top: 0;
@@ -937,7 +1048,6 @@ const getComponent = (type: string) => {
   flex-direction: column;
   animation: slideUp 0.3s ease-out;
 }
-
 @keyframes slideUp {
   from {
     transform: translateY(100%);
@@ -946,7 +1056,6 @@ const getComponent = (type: string) => {
     transform: translateY(0);
   }
 }
-
 .overlay-header {
   padding: 15px 25px;
   border-bottom: 1px solid #eee;
@@ -963,13 +1072,7 @@ const getComponent = (type: string) => {
   border: none;
   color: #666;
   cursor: pointer;
-  font-size: 14px;
 }
-.close-overlay:hover {
-  color: #333;
-  text-decoration: underline;
-}
-
 .overlay-content {
   flex: 1;
   padding: 40px;
@@ -978,8 +1081,6 @@ const getComponent = (type: string) => {
   align-items: center;
   justify-content: center;
 }
-
-/* 上传大区域 */
 .upload-zone {
   width: 100%;
   max-width: 400px;
@@ -992,7 +1093,6 @@ const getComponent = (type: string) => {
   align-items: center;
   cursor: pointer;
   background: #fafafa;
-  transition: 0.2s;
 }
 .upload-zone:hover {
   border-color: #333;
@@ -1002,25 +1102,11 @@ const getComponent = (type: string) => {
   font-size: 48px;
   margin-bottom: 10px;
 }
-.upload-zone p {
-  margin: 0;
-  font-weight: bold;
-  color: #333;
-}
-.sub-text {
-  font-size: 12px;
-  color: #999;
-  margin-top: 5px;
-}
-
 .divider-text {
   margin: 25px 0;
   color: #ccc;
   font-size: 14px;
-  position: relative;
 }
-
-/* URL 输入区域 */
 .url-zone {
   width: 100%;
   max-width: 400px;
@@ -1033,10 +1119,6 @@ const getComponent = (type: string) => {
   border: 1px solid #ddd;
   border-radius: 8px;
   outline: none;
-  transition: 0.2s;
-}
-.url-zone input:focus {
-  border-color: #333;
 }
 .confirm-btn {
   background: #333;
@@ -1046,8 +1128,5 @@ const getComponent = (type: string) => {
   border-radius: 8px;
   cursor: pointer;
   font-weight: bold;
-}
-.confirm-btn:hover {
-  background: #555;
 }
 </style>

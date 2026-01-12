@@ -8,12 +8,11 @@ interface Group {
   layout: any[];
 }
 
-// 新增：壁纸配置接口
 interface WallpaperConfig {
-  type: "static" | "rotation"; // 'static'=单张, 'rotation'=轮播
-  images: string[]; // 图片列表
-  staticImage: string; // 单张模式下选中的图片
-  interval: number; // 轮播间隔 (分钟)
+  type: "static" | "rotation";
+  images: string[];
+  staticImage: string;
+  interval: number;
 }
 
 // --- 默认数据 ---
@@ -35,7 +34,6 @@ const defaultGroups: Group[] = [
   },
 ];
 
-// 默认必应每日壁纸作为初始壁纸
 const defaultWallpaper: WallpaperConfig = {
   type: "static",
   images: [
@@ -45,7 +43,7 @@ const defaultWallpaper: WallpaperConfig = {
   ],
   staticImage:
     "https://bing.com/th?id=OHR.BlueHourItaly_ZH-CN0640826569_1920x1080.jpg",
-  interval: 15, // 默认15分钟
+  interval: 15,
 };
 
 const STORAGE_KEY_GROUPS = "vvtab-groups-v2";
@@ -57,23 +55,16 @@ export function useLayoutStorage() {
   const wallpaperConfig = ref<WallpaperConfig>(
     JSON.parse(JSON.stringify(defaultWallpaper))
   );
-
   const isLoaded = ref(false);
 
   // --- 加载与保存 ---
   const loadData = () => {
-    // 1. 加载分组
     const loadGroups = (data: any) => {
-      if (data && Array.isArray(data) && data.length > 0) {
-        groups.value = data;
-      }
+      if (data && Array.isArray(data) && data.length > 0) groups.value = data;
     };
-
-    // 2. 加载壁纸
     const loadWallpaper = (data: any) => {
-      if (data && data.images) {
+      if (data && data.images)
         wallpaperConfig.value = { ...defaultWallpaper, ...data };
-      }
     };
 
     if (
@@ -100,8 +91,6 @@ export function useLayoutStorage() {
 
   const saveData = () => {
     if (!isLoaded.value) return;
-
-    // 深拷贝数据
     const groupsData = JSON.parse(JSON.stringify(groups.value));
     const wallpaperData = JSON.parse(JSON.stringify(wallpaperConfig.value));
 
@@ -123,17 +112,18 @@ export function useLayoutStorage() {
     }
   };
 
-  // --- 基础操作 ---
   const switchGroup = (index: number) => {
     currentGroupIndex.value = index;
   };
 
-  // --- 分组操作 ---
-  const addGroup = () => {
+  // --- 分组操作 (核心修改) ---
+
+  // 1. 新增分组 (现在接收 name 和 icon)
+  const addGroup = (name: string, icon: string) => {
     const newGroup: Group = {
       id: `group-${Date.now()}`,
-      name: `分组 ${groups.value.length + 1}`,
-      icon: "📁",
+      name: name,
+      icon: icon,
       layout: [],
     };
     groups.value.push(newGroup);
@@ -141,14 +131,22 @@ export function useLayoutStorage() {
     saveData();
   };
 
+  // 2. 更新分组 (新增方法)
+  const updateGroup = (index: number, name: string, icon: string) => {
+    if (groups.value[index]) {
+      groups.value[index].name = name;
+      groups.value[index].icon = icon;
+      saveData();
+    }
+  };
+
+  // 3. 删除分组
   const deleteGroup = (index: number) => {
     if (groups.value.length <= 1) {
       alert("至少保留一个分组！");
       return;
     }
-    const name = groups.value[index]?.name ?? `分组 ${index + 1}`;
-    if (!confirm(`确定要删除“${name}”吗？`)) return;
-
+    // 注意：这里的 confirm 移到了 UI 层 (App.vue) 处理，这里只负责删数据
     groups.value.splice(index, 1);
     if (currentGroupIndex.value >= index) {
       currentGroupIndex.value = Math.max(0, currentGroupIndex.value - 1);
@@ -172,15 +170,13 @@ export function useLayoutStorage() {
     widget.y = 0;
     targetGroup.layout.push(widget);
     saveData();
-    alert(`已移动到 ${targetGroup.name}`);
   };
 
   const addWidgetToLayout = (widgetType: string) => {
     const currentGroup = groups.value[currentGroupIndex.value];
     if (!currentGroup) return;
-
     const yPos = currentGroup.layout.reduce(
-      (max, item: any) => Math.max(max, item.y + item.h),
+      (max: number, item: any) => Math.max(max, item.y + item.h),
       0
     );
     const newWidget = {
@@ -192,12 +188,10 @@ export function useLayoutStorage() {
       type: widgetType,
       title: widgetType === "Memo" ? "新备忘录" : undefined,
     };
-
     if (widgetType === "Search") {
       newWidget.w = 4;
       newWidget.h = 1;
     }
-
     currentGroup.layout.push(newWidget);
     saveData();
   };
@@ -205,11 +199,12 @@ export function useLayoutStorage() {
   return {
     groups,
     currentGroupIndex,
-    wallpaperConfig, // <--- 导出壁纸配置
+    wallpaperConfig,
     switchGroup,
     loadData,
     saveData,
     addGroup,
+    updateGroup, // <--- 记得导出
     deleteGroup,
     moveWidgetToGroup,
     addWidgetToLayout,
