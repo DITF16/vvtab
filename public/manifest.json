@@ -3,7 +3,7 @@
   "name": "VVTab - My New Tab",
   "version": "1.0.0",
   "description": "基于 Vue3 的自定义新标签页",
-  "permissions": ["storage"],
+  "permissions": ["storage", "unlimitedStorage"],
   "chrome_url_overrides": {
     "newtab": "index.html"
   },

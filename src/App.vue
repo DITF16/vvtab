@@ -199,16 +199,38 @@
               </button>
             </div>
 
-            <div class="image-item add-wp" @click="isAddingWallpaper = true">
-              <span v-if="!isAddingWallpaper" style="font-size: 24px">+</span>
+            <div
+              class="image-item add-wp"
+              @click="isAddingWallpaper = true"
+              v-if="!isAddingWallpaper"
+            >
+              <span style="font-size: 24px">+</span>
+              <div style="font-size: 12px; margin-top: 5px">添加图片</div>
+            </div>
+
+            <div class="image-item add-wp-form" v-else>
               <input
-                v-else
-                v-model="newWallpaperUrl"
-                placeholder="输入图片URL"
-                @keydown.enter="addNewWallpaper"
-                @blur="addNewWallpaper"
-                autoFocus
+                type="file"
+                ref="fileInputRef"
+                accept="image/*"
+                style="display: none"
+                @change="handleFileSelect"
               />
+
+              <button class="upload-btn" @click="triggerFileUpload">
+                📂 上传本地文件
+              </button>
+              <div class="or-divider">- 或 -</div>
+              <input
+                v-model="newWallpaperUrl"
+                placeholder="输入网络图片URL"
+                @keydown.enter="addNewWallpaper"
+                class="url-input"
+              />
+              <button class="confirm-btn" @click="addNewWallpaper">确定</button>
+              <button class="cancel-btn" @click="isAddingWallpaper = false">
+                取消
+              </button>
             </div>
           </div>
         </div>
@@ -225,11 +247,11 @@ import ClockWidget from "./components/widgets/ClockWidget.vue";
 import SearchWidget from "./components/widgets/SearchWidget.vue";
 import ShortcutWidget from "./components/widgets/ShortcutWidget.vue";
 
-// --- 引入数据 ---
+// --- 1. 引入数据存储 ---
 const {
   groups,
   currentGroupIndex,
-  wallpaperConfig, // <--- 拿到壁纸配置
+  wallpaperConfig, // 拿到壁纸配置
   switchGroup,
   loadData,
   saveData,
@@ -239,20 +261,30 @@ const {
   addWidgetToLayout,
 } = useLayoutStorage();
 
-// --- 状态 ---
+// --- 2. 状态定义 ---
 const showShortcutModal = ref(false);
-const showWallpaperModal = ref(false); // 壁纸弹窗状态
-const isAddingWallpaper = ref(false); // 是否正在输入壁纸URL
-const newWallpaperUrl = ref("");
+const showWallpaperModal = ref(false); // 壁纸弹窗显隐
+const isAddingWallpaper = ref(false); // 是否显示输入框区域
+const newWallpaperUrl = ref(""); // 网络图片URL绑定
+const fileInputRef = ref<HTMLInputElement | null>(null); // 本地文件Input的引用
 
 // 轮播相关状态
 const rotationIndex = ref(0);
 let rotationTimer: any = null;
 
-// --- 表单数据 ---
+// 表单数据
 const shortcutForm = reactive({ title: "", url: "", icon: "" });
 
-// --- 计算属性 ---
+// 右键菜单状态
+const contextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  type: "background",
+  targetWidgetId: "",
+});
+
+// --- 3. 计算属性 ---
 
 // 安全获取当前布局
 const currentLayout = computed({
@@ -266,10 +298,10 @@ const currentLayout = computed({
   },
 });
 
-// 计算当前背景图
+// 计算当前背景图（核心逻辑）
 const currentWallpaperUrl = computed(() => {
   const cfg = wallpaperConfig.value;
-  // 1. 如果没有图片，用默认渐变（这里返回空，CSS兜底）
+  // 1. 如果没有图片，返回空
   if (!cfg.images || cfg.images.length === 0) return "";
 
   // 2. 单张模式
@@ -278,12 +310,11 @@ const currentWallpaperUrl = computed(() => {
   }
 
   // 3. 轮播模式
-  // 确保索引不越界
   const idx = rotationIndex.value % cfg.images.length;
   return cfg.images[idx];
 });
 
-// --- 初始化 ---
+// --- 4. 生命周期与监听 ---
 onMounted(() => {
   loadData();
   startRotationTimer();
@@ -302,9 +333,6 @@ function startRotationTimer() {
 
   if (wallpaperConfig.value.type === "rotation") {
     const ms = (wallpaperConfig.value.interval || 15) * 60 * 1000;
-    // 立即随机一张开始 (可选，或者从0开始)
-    // rotationIndex.value = Math.floor(Math.random() * wallpaperConfig.value.images.length);
-
     rotationTimer = setInterval(() => {
       rotationIndex.value++;
     }, ms);
@@ -313,7 +341,7 @@ function startRotationTimer() {
 
 const handleSave = () => saveData();
 
-// --- 壁纸逻辑 ---
+// --- 5. 壁纸管理逻辑 (本次修改的核心) ---
 
 const openWallpaperSettings = () => {
   showWallpaperModal.value = true;
@@ -326,24 +354,10 @@ const changeWallpaperMode = (mode: "static" | "rotation") => {
 };
 
 const selectWallpaper = (url: string) => {
-  // 只有单张模式下点击才切换
   if (wallpaperConfig.value.type === "static") {
     wallpaperConfig.value.staticImage = url;
     handleSave();
   }
-};
-
-const addNewWallpaper = () => {
-  if (newWallpaperUrl.value) {
-    wallpaperConfig.value.images.push(newWallpaperUrl.value);
-    // 如果是第一张，设为默认
-    if (wallpaperConfig.value.images.length === 1) {
-      wallpaperConfig.value.staticImage = newWallpaperUrl.value;
-    }
-    handleSave();
-  }
-  newWallpaperUrl.value = "";
-  isAddingWallpaper.value = false;
 };
 
 const deleteWallpaper = (index: number) => {
@@ -355,19 +369,60 @@ const deleteWallpaper = (index: number) => {
     wallpaperConfig.value.staticImage === deletedUrl &&
     wallpaperConfig.value.images.length > 0
   ) {
-    wallpaperConfig.value.staticImage = wallpaperConfig.value.images[0] || "";
+    wallpaperConfig.value.staticImage = wallpaperConfig.value.images[0] ?? "";
   }
   handleSave();
 };
 
-// --- 右键菜单逻辑 ---
-const contextMenu = reactive({
-  visible: false,
-  x: 0,
-  y: 0,
-  type: "background",
-  targetWidgetId: "",
-});
+// 触发隐藏的文件输入框点击
+const triggerFileUpload = () => {
+  fileInputRef.value?.click();
+};
+
+// 处理文件选择（转 Base64）
+const handleFileSelect = (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  if (input.files && input.files[0]) {
+    const file = input.files[0];
+
+    // 限制大小 3MB
+    if (file.size > 3 * 1024 * 1024) {
+      alert("图片太大啦！建议上传 3MB 以内的图片，否则浏览器会变卡哦。");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64String = e.target?.result as string;
+      if (base64String) {
+        addWallpaperToConfig(base64String);
+        isAddingWallpaper.value = false;
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+};
+
+// 添加网络图片
+const addNewWallpaper = () => {
+  if (newWallpaperUrl.value) {
+    addWallpaperToConfig(newWallpaperUrl.value);
+    newWallpaperUrl.value = "";
+    isAddingWallpaper.value = false;
+  }
+};
+
+// 统一添加逻辑 helper
+const addWallpaperToConfig = (urlOrBase64: string) => {
+  wallpaperConfig.value.images.push(urlOrBase64);
+  // 如果是第一张，设为默认
+  if (wallpaperConfig.value.images.length === 1) {
+    wallpaperConfig.value.staticImage = urlOrBase64;
+  }
+  handleSave();
+};
+
+// --- 6. 右键菜单逻辑 ---
 
 const openBackgroundMenu = (e: MouseEvent) => {
   contextMenu.visible = true;
@@ -389,7 +444,8 @@ const closeContextMenu = () => {
   contextMenu.visible = false;
 };
 
-// --- 其他功能逻辑 ---
+// --- 7. 其他功能逻辑 (快捷方式、组件等) ---
+
 const onSidebarRightClick = (index: number) => deleteGroup(index);
 
 const handleMoveWidget = (targetGroupIndex: number) => {
@@ -408,7 +464,7 @@ const handleDeleteWidget = () => {
   closeContextMenu();
 };
 
-const openWidgetStore = () => addWidgetToLayout("Memo"); // 简化，直接添加测试
+const openWidgetStore = () => addWidgetToLayout("Memo");
 
 const openAddShortcutModal = () => {
   shortcutForm.title = "";
@@ -799,11 +855,78 @@ const getComponent = (type: string) => {
   display: block;
 }
 
+/* 修改 add-wp 样式，使其更灵活 */
 .add-wp {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   border: 2px dashed #ddd;
+  color: #999;
+  cursor: pointer;
+}
+.add-wp:hover {
+  border-color: #666;
+  color: #666;
+}
+
+/* 上传表单样式 */
+.add-wp-form {
+  border: 1px solid #eee;
+  background: #f9f9f9;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
+  cursor: default;
+}
+
+.upload-btn {
+  width: 100%;
+  padding: 6px;
+  background: #333;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.or-divider {
+  font-size: 10px;
+  color: #ccc;
+  margin: 5px 0;
+}
+
+.url-input {
+  width: 100%;
+  font-size: 12px;
+  padding: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box; /* 防止撑破 */
+}
+
+.confirm-btn,
+.cancel-btn {
+  width: 48%;
+  font-size: 11px;
+  padding: 4px;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+}
+.confirm-btn {
+  background: #4caf50;
+  color: white;
+  float: left;
+  margin-right: 4%;
+}
+.cancel-btn {
+  background: #ddd;
+  color: #333;
 }
 .add-wp input {
   width: 90%;
