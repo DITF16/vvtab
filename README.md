@@ -1,14 +1,16 @@
 <div align="center">
 
+
 # 🎨 vvtab
 
-**一款开源、高自由度的组件式浏览器标签页扩展**
+**一款基于 Vue 3 + Vite 构建的高自由度、组件化浏览器新标签页扩展**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-![Version](https://img.shields.io/badge/version-0.1.0-orange)
+[![Vue](https://img.shields.io/badge/Vue-3.x-green.svg)](https://vuejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
+![Version](https://img.shields.io/badge/version-0.2.0-orange)
 
-[功能特性](#-功能特性) • [开发进度](#-开发进度) • [安装指南](#-安装指南) • [后续计划](#-后续计划) • [English](./README_EN.md)
+[功能特性](#-功能特性) • [技术栈](#️-技术栈) • [安装指南](#️-安装与开发指南) • [English](./README_EN.md)
 
 </div>
 
@@ -16,57 +18,105 @@
 
 ## 📖 简介
 
-**vvtab** 旨在打破传统浏览器新标签页的枯燥布局。通过组件化的设计，用户可以像搭积木一样自由组合、拖拽、配置自己的专属主页。
+**vvtab** 旨在打破传统浏览器新标签页的枯燥布局。区别于市面上固定的导航页，vvtab 采用了完全**栅格化**的交互设计，用户可以像操作桌面系统一样，自由拖拽组件、创建分组、更换壁纸，甚至在桌面上养一只可互动的 Live2D 宠物。
 
-本项目目前处于早期开发阶段，我将其开源是希望能**抛砖引玉**，寻找更多对前端交互、组件化设计感兴趣的伙伴，一起构建一个美观且强大的 New Tab 生态。
+本项目完全开源，旨在探索 **Vue 3 在 Chrome Extension V3 标准下** 的最佳实践，欢迎前端爱好者一起参与共建。
 
-## 📸 开发进度 / 当前效果
+## 📸 预览
 
-> *当前版本的实际运行效果截图*
+> 此处展示项目的最新进展截图
 
 ![Dashboard Preview](image.png)
 
-
 ## ✨ 功能特性
 
-* **🧩 组件化架构**：每个功能模块都是独立的组件，按需加载。
-* **🎨 高度可定制**：支持自由布局，定义属于你的浏览器入口。
-* **⚡ 轻量极速**：无多余后台进程，秒开新标签页。
+### 🖥️ 核心交互
 
+* **栅格化布局系统**：基于 `grid-layout-plus`，组件可自由拖拽、缩放，位置自动吸附。
+* **多工作区（分组）**：左侧侧边栏支持创建多个分组（如：主页、工作、娱乐），支持自定义图标，右键即可管理。
+* **沉浸式右键菜单**：摒弃原生丑陋菜单，重写了右键交互。点击空白处、组件、侧边栏均有不同的上下文菜单。
+
+### 🎨 个性化定制
+
+* **壁纸引擎**：
+  * 支持**单张模式**与**轮播模式**（自定义间隔）。
+  * 支持**网络图片 URL**。
+  * **[亮点]** 支持**本地图片上传**（自动转 Base64 存储，突破浏览器沙箱限制）。
+* **Live2D 看板娘**：
+  * 基于 `PixiJS v6` + `Cubism SDK`，完美兼容 Chrome V3 安全策略（CSP）。
+  * 支持**本地模型加载**（无需图床，直接读取扩展目录）。
+  * 支持拖拽移动、滚轮缩放、点击互动（动作/语音气泡）。
+
+### 🧩 实用组件
+
+* **快捷方式**：支持添加任意网站，自动抓取 Favicon，防止原生拖拽误触。
+* **基础组件**：内置数字时钟、搜索栏等基础 Widget。
+
+## 🛠️ 技术栈
+
+* **核心框架**：Vue 3 (Script Setup) + TypeScript
+* **构建工具**：Vite
+* **布局引擎**：grid-layout-plus
+* **渲染引擎**：PixiJS v6 + pixi-live2d-display
+* **数据持久化**：Chrome Storage API / LocalStorage (回退方案)
 
 ## 🚀 后续计划
 
 我们正在积极开发以下功能，欢迎认领任务！
 
-- [ ] **配置管理**：支持用户配置的 JSON 导出与导入。
-- [ ] **云端同步**：实现配置数据的云端备份，多设备无缝切换。
-- [ ] **组件库扩充**：添加天气、待办事项、日历、RSS 阅读器等更多实用组件。
-- [x] **Live2D 陪伴**：引入 Live2D 看板娘/宠物，让浏览器更有温度。
-- [ ] **AI 赋能**：接入大语言模型（LLM），支持主页直接对话。
+- [x] **Live2D 核心支持**：已解决 `unsafe-eval` 报错，实现本地模型加载与交互。
+- [x] **壁纸管理器**：支持本地上传与轮播。
+- [x] **分组管理**：支持增删改查分组信息。
+- [ ] **组件库扩充**：计划添加天气（API对接）、日历、待办事项 (Todo)、RSS 阅读器。
+- [ ] **配置导入/导出**：支持 JSON 格式导出所有布局数据，方便迁移。
+- [ ] **AI 赋能**：利用 Live2D 的气泡，接入 LLM (OpenAI/DeepSeek) 实现桌面对话助手。
 
 ## 🛠️ 安装与开发指南
 
 如果你是开发者，想要参与贡献或在本地调试：
 
-```bash
-# 1. 克隆项目
-git clone https://github.com/DITF16/vvtab.git
+### 1. 环境准备
 
-# 2. 进入目录
+```bash
+# 克隆项目
+git clone https://github.com/DITF16/vvtab.git
 cd vvtab
 
-# 3. 安装依赖
+# 安装依赖 (建议使用 pnpm 或 npm)
+# 注意：项目对 PixiJS 版本有严格要求，请遵循 package.json
 npm install
-# 或者 yarn install / pnpm install
+```
 
-# 4. 启动开发服务器
+### 2. 开发模式
+
+```Bash
 npm run dev
 ```
+
+### 3. 构建扩展
+
+```Bash
+npm run build
+```
+
+构建完成后，会在项目根目录生成 `dist` 文件夹。
+
+### 4. 加载到浏览器
+
+1. 打开 Chrome 浏览器，访问 `chrome://extensions/`
+2. 开启右上角的 **"开发者模式"**。
+3. 点击 **"加载已解压的扩展程序"**。
+4. 选择本项目下的 `dist` 文件夹。
+
+> **注意**：Live2D 模型文件需放置在 `public/models` 下，确保目录结构正确以免出现 404 错误。
+
 ## 🤝 参与贡献
 
-非常欢迎任何形式的贡献！无论是提交 Bug、提出新功能建议，还是提交代码（Pull Request）。
+非常欢迎任何形式的贡献！
 
-如果你对这种项目有经验，请务必联系我！让我们一起完善 vvtab。
+- 如果你发现了 Bug，请提交 Issue。
+- 如果你有好看的 Live2D 模型或壁纸，欢迎分享。
+- 如果你擅长 Vue 组件开发，欢迎提交 PR 丰富组件库。
 
 ## 📄 开源协议
 
