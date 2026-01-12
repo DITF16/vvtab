@@ -200,37 +200,48 @@
             </div>
 
             <div
-              class="image-item add-wp"
+              class="image-item add-wp-btn"
               @click="isAddingWallpaper = true"
-              v-if="!isAddingWallpaper"
             >
-              <span style="font-size: 24px">+</span>
-              <div style="font-size: 12px; margin-top: 5px">添加图片</div>
+              <span class="plus-icon">+</span>
+              <span class="text">添加壁纸</span>
             </div>
+          </div>
 
-            <div class="image-item add-wp-form" v-else>
-              <input
-                type="file"
-                ref="fileInputRef"
-                accept="image/*"
-                style="display: none"
-                @change="handleFileSelect"
-              />
-
-              <button class="upload-btn" @click="triggerFileUpload">
-                📂 上传本地文件
-              </button>
-              <div class="or-divider">- 或 -</div>
-              <input
-                v-model="newWallpaperUrl"
-                placeholder="输入网络图片URL"
-                @keydown.enter="addNewWallpaper"
-                class="url-input"
-              />
-              <button class="confirm-btn" @click="addNewWallpaper">确定</button>
-              <button class="cancel-btn" @click="isAddingWallpaper = false">
+          <div v-if="isAddingWallpaper" class="add-overlay">
+            <div class="overlay-header">
+              <h4>添加新壁纸</h4>
+              <button class="close-overlay" @click="isAddingWallpaper = false">
                 取消
               </button>
+            </div>
+
+            <div class="overlay-content">
+              <div class="upload-zone" @click="triggerFileUpload">
+                <input
+                  type="file"
+                  ref="fileInputRef"
+                  accept="image/*"
+                  style="display: none"
+                  @change="handleFileSelect"
+                />
+                <span class="upload-icon">📂</span>
+                <p>点击上传本地图片</p>
+                <span class="sub-text">支持 JPG, PNG, WEBP (最大 3MB)</span>
+              </div>
+
+              <div class="divider-text">或者</div>
+
+              <div class="url-zone">
+                <input
+                  v-model="newWallpaperUrl"
+                  placeholder="输入网络图片地址 (https://...)"
+                  @keydown.enter="addNewWallpaper"
+                />
+                <button class="confirm-btn" @click="addNewWallpaper">
+                  确认添加
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -752,185 +763,291 @@ const getComponent = (type: string) => {
 .btn:hover {
   opacity: 0.9;
 }
-
-/* --- 壁纸弹窗样式 --- */
+/* --- 壁纸弹窗样式优化 --- */
 .wallpaper-modal {
-  width: 600px;
-  height: 500px;
+  width: 700px; /* 稍微加宽一点 */
+  height: 550px;
   background: white;
   border-radius: 16px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative; /* 为覆盖层做定位基准 */
 }
+
 .modal-header {
-  padding: 15px 20px;
-  border-bottom: 1px solid #eee;
+  padding: 15px 25px;
+  border-bottom: 1px solid #f0f0f0;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 .modal-header h3 {
   margin: 0;
+  font-size: 18px;
+  color: #333;
 }
 .close-btn {
   background: none;
   border: none;
   font-size: 24px;
   cursor: pointer;
+  color: #999;
+  transition: 0.2s;
+}
+.close-btn:hover {
+  color: #333;
 }
 
 .wp-body {
-  padding: 20px;
+  padding: 25px;
   flex: 1;
   overflow-y: auto;
+  position: relative;
 }
 
+/* 模式切换 */
 .mode-switch {
   display: flex;
   gap: 10px;
-  margin-bottom: 20px;
+  margin-bottom: 25px;
+  background: #f5f5f5;
+  padding: 5px;
+  border-radius: 10px;
 }
 .mode-switch button {
   flex: 1;
   padding: 10px;
-  border: 1px solid #ddd;
+  border: none;
   border-radius: 8px;
-  background: #f9f9f9;
+  background: transparent;
   cursor: pointer;
+  color: #666;
+  font-weight: bold;
+  transition: 0.2s;
 }
 .mode-switch button.active {
-  background: #333;
-  color: white;
-  border-color: #333;
+  background: white;
+  color: #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .rotation-settings {
   margin-bottom: 20px;
+  font-size: 14px;
+  color: #666;
   display: flex;
   align-items: center;
   gap: 10px;
 }
 .interval-input {
-  width: 80px !important;
-  padding: 5px !important;
+  width: 60px;
+  padding: 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  text-align: center;
 }
 
+/* 图片网格 */
 .image-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 15px;
 }
+
 .image-item {
   aspect-ratio: 16/9;
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
   position: relative;
   cursor: pointer;
-  border: 2px solid transparent;
-  background: #f0f0f0;
+  border: 3px solid transparent;
+  background: #eee;
+  transition: all 0.2s;
+}
+.image-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+.image-item.selected {
+  border-color: #333;
 }
 .image-item img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-.image-item.selected {
-  border-color: #333;
-}
+
 .del-img-btn {
   position: absolute;
-  top: 5px;
-  right: 5px;
-  background: rgba(0, 0, 0, 0.5);
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
   color: white;
   border: none;
   border-radius: 50%;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   cursor: pointer;
-  display: none;
+  opacity: 0;
+  transition: 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 .image-item:hover .del-img-btn {
-  display: block;
+  opacity: 1;
 }
 
-/* 修改 add-wp 样式，使其更灵活 */
-.add-wp {
+/* 添加按钮样式 */
+.add-wp-btn {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   border: 2px dashed #ddd;
+  background: #fafafa;
   color: #999;
-  cursor: pointer;
 }
-.add-wp:hover {
-  border-color: #666;
+.add-wp-btn:hover {
+  border-color: #999;
   color: #666;
+  background: #f0f0f0;
+}
+.plus-icon {
+  font-size: 32px;
+  font-weight: 300;
+  line-height: 1;
+  margin-bottom: 5px;
+}
+.text {
+  font-size: 12px;
 }
 
-/* 上传表单样式 */
-.add-wp-form {
-  border: 1px solid #eee;
-  background: #f9f9f9;
+/* === 核心优化：全屏覆盖层样式 === */
+.add-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: white;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.overlay-header {
+  padding: 15px 25px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.overlay-header h4 {
+  margin: 0;
+  font-size: 16px;
+}
+.close-overlay {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 14px;
+}
+.close-overlay:hover {
+  color: #333;
+  text-decoration: underline;
+}
+
+.overlay-content {
+  flex: 1;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 上传大区域 */
+.upload-zone {
+  width: 100%;
+  max-width: 400px;
+  height: 180px;
+  border: 2px dashed #ddd;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 10px;
-  cursor: default;
+  cursor: pointer;
+  background: #fafafa;
+  transition: 0.2s;
+}
+.upload-zone:hover {
+  border-color: #333;
+  background: #f0f0f0;
+}
+.upload-icon {
+  font-size: 48px;
+  margin-bottom: 10px;
+}
+.upload-zone p {
+  margin: 0;
+  font-weight: bold;
+  color: #333;
+}
+.sub-text {
+  font-size: 12px;
+  color: #999;
+  margin-top: 5px;
 }
 
-.upload-btn {
+.divider-text {
+  margin: 25px 0;
+  color: #ccc;
+  font-size: 14px;
+  position: relative;
+}
+
+/* URL 输入区域 */
+.url-zone {
   width: 100%;
-  padding: 6px;
+  max-width: 400px;
+  display: flex;
+  gap: 10px;
+}
+.url-zone input {
+  flex: 1;
+  padding: 10px 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  outline: none;
+  transition: 0.2s;
+}
+.url-zone input:focus {
+  border-color: #333;
+}
+.confirm-btn {
   background: #333;
   color: white;
   border: none;
-  border-radius: 4px;
+  padding: 0 20px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-weight: bold;
 }
-
-.or-divider {
-  font-size: 10px;
-  color: #ccc;
-  margin: 5px 0;
-}
-
-.url-input {
-  width: 100%;
-  font-size: 12px;
-  padding: 5px;
-  margin-bottom: 5px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  box-sizing: border-box; /* 防止撑破 */
-}
-
-.confirm-btn,
-.cancel-btn {
-  width: 48%;
-  font-size: 11px;
-  padding: 4px;
-  cursor: pointer;
-  border: none;
-  border-radius: 4px;
-}
-.confirm-btn {
-  background: #4caf50;
-  color: white;
-  float: left;
-  margin-right: 4%;
-}
-.cancel-btn {
-  background: #ddd;
-  color: #333;
-}
-.add-wp input {
-  width: 90%;
-  font-size: 12px;
-  padding: 4px;
+.confirm-btn:hover {
+  background: #555;
 }
 </style>
